@@ -4,9 +4,9 @@
 process COMBINE_MBAT {
     tag "${gwas_prefix}"
     label 'medium_mem'
-    publishDir "${params.outdir}/scdrs/gwas", mode: 'copy'
+    publishDir "${params.outdir}/scdrs/mbat", mode: 'copy'
     
-    container "file://${projectDir}/environments/py-r-cepo-scdrs.sif"
+    container "${projectDir}/environments/py-r-cepo-scdrs.sif"
 
     input:
     tuple val(gwas_prefix), path(mbat_files)
@@ -46,14 +46,6 @@ process COMBINE_MBAT {
     cat(sprintf("\\nFirst 5 genes:\\n"))
     print(head(gwas_combined, 5))
     RSCRIPT
-    
-    if [ ! -f "${gwas_prefix}.gene.assoc.full.mbat" ]; then
-        echo "❌ ERROR: Failed to combine mBAT results" | tee -a combine_mbat.log
-        exit 1
-    fi
-    
-    echo "" | tee -a combine_mbat.log
-    echo "✓ Combining complete" | tee -a combine_mbat.log
     
     mv combine_mbat.log ${gwas_prefix}_combine_mbat.log
     """

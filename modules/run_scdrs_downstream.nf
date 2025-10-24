@@ -27,33 +27,11 @@ process RUN_SCDRS_DOWNSTREAM {
     
     scdrs perform-downstream \\
         --h5ad-file "${h5ad}" \\
-        --score-file "${score_file}" \\
+        --score-file ./"${score_file}" \\
         --out-folder . \\
         --group-analysis "${params.cell_type_col}" \\
         --flag-filter-data ${params.scdrs_filter_data} \\
         --flag-raw-count ${params.scdrs_raw_count} \\
         2>&1 | tee -a scdrs_downstream.log
-    
-    # Find the group analysis results file
-    GROUP_FILE=\$(ls *group* 2>/dev/null | head -n 1)
-    
-    if [ -z "\${GROUP_FILE}" ]; then
-        echo "⚠️  WARNING: Group analysis file not found" | tee -a scdrs_downstream.log
-    else
-        echo "" | tee -a scdrs_downstream.log
-        echo "✓ Downstream analysis complete" | tee -a scdrs_downstream.log
-        echo "  Output: \${GROUP_FILE}" | tee -a scdrs_downstream.log
-        echo "" | tee -a scdrs_downstream.log
-        echo "Cell type association results (top 10):" | tee -a scdrs_downstream.log
-        if [[ "\${GROUP_FILE}" == *.gz ]]; then
-            zcat "\${GROUP_FILE}" | head -n 11 | column -t | tee -a scdrs_downstream.log
-        else
-            cat "\${GROUP_FILE}" | head -n 11 | column -t | tee -a scdrs_downstream.log
-        fi
-    fi
-    
-    # Rename log to match score file
-    TRAIT=\$(basename "${score_file}" .full_score.gz)
-    mv scdrs_downstream.log \${TRAIT}_scdrs_downstream.log
     """
 }

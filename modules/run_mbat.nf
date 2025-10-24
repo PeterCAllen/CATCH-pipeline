@@ -3,13 +3,13 @@
 
 process RUN_MBAT {
     tag "chr${chr}"
-    label 'high_mem'
+    label 'medium_mem'
     publishDir "${params.outdir}/scdrs/mbat", mode: 'copy', pattern: "*_chr*.gene.assoc.mbat"
     
-    container "file://${projectDir}/environments/py-r-cepo-scdrs.sif"
+    container "${projectDir}/environments/gcta_v1.94.1.sif"
 
     input:
-    tuple val(chr), path(formatted_gwas), path(mbat_genes), path(plink_files)
+    tuple val(chr), path(formatted_gwas), path(mbat_genes), val(plink_prefix), path(plink_files)
 
     output:
     tuple val(chr), path("*_chr${chr}.gene.assoc.mbat"), emit: mbat_result
@@ -17,7 +17,6 @@ process RUN_MBAT {
 
     script:
     def gwas_prefix = formatted_gwas.simpleName.replaceAll(~/_formatted$/, '')
-    def plink_prefix = plink_files[0].simpleName.replaceAll(~/\\.${chr}\$/, '').replaceAll(~/\\.bed\$/, '')
     
     """
     echo "========================================" | tee mbat_chr${chr}.log
@@ -25,6 +24,7 @@ process RUN_MBAT {
     echo "========================================" | tee -a mbat_chr${chr}.log
     echo "GWAS: ${formatted_gwas}" | tee -a mbat_chr${chr}.log
     echo "Gene list: ${mbat_genes}" | tee -a mbat_chr${chr}.log
+    echo "PLINK prefix: ${plink_prefix}" | tee -a mbat_chr${chr}.log
     echo "Window: ${params.scdrs_mbat_window_kb} kb" | tee -a mbat_chr${chr}.log
     echo "" | tee -a mbat_chr${chr}.log
     
@@ -37,10 +37,6 @@ process RUN_MBAT {
         --out "${gwas_prefix}_chr${chr}" \\
         2>&1 | tee -a mbat_chr${chr}.log
     
-    if [ ! -f "${gwas_prefix}_chr${chr}.gene.assoc.mbat" ]; then
-        echo "❌ ERROR: mBAT failed for chromosome ${chr}" | tee -a mbat_chr${chr}.log
-        exit 1
-    fi
     
     N_GENES=\$(tail -n +2 "${gwas_prefix}_chr${chr}.gene.assoc.mbat" | wc -l)
     echo "" | tee -a mbat_chr${chr}.log

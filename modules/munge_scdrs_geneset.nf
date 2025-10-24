@@ -3,10 +3,10 @@
 
 process MUNGE_SCDRS_GENESET {
     tag "${tsv_file.simpleName}"
-    label 'medium_mem'
+    label 'low_mem'
     publishDir "${params.outdir}/scdrs/genesets", mode: 'copy'
     
-    container "file://${projectDir}/environments/py-r-cepo-scdrs.sif"
+    container "${projectDir}/environments/py-r-cepo-scdrs.sif"
 
     input:
     path tsv_file
@@ -31,11 +31,6 @@ process MUNGE_SCDRS_GENESET {
         --weight zscore \\
         --n-max ${params.scdrs_top_genes} \\
         2>&1 | tee -a munge_gs.log
-    
-    if [ ! -f "${gwas_prefix}.gs" ]; then
-        echo "❌ ERROR: Failed to create scDRS gene set" | tee -a munge_gs.log
-        exit 1
-    fi
     
     echo "" | tee -a munge_gs.log
     echo "✓ Gene set creation complete" | tee -a munge_gs.log

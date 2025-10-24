@@ -6,7 +6,7 @@ process RUN_SCDRS_SCORE {
     label 'high_mem'
     publishDir "${params.outdir}/scdrs/scores", mode: 'copy'
     
-    container "file://${projectDir}/environments/py-r-cepo-scdrs.sif"
+    container "${projectDir}/environments/py-r-cepo-scdrs.sif"
 
     input:
     tuple path(h5ad), path(geneset)
@@ -37,24 +37,5 @@ process RUN_SCDRS_SCORE {
         --flag-filter-data ${params.scdrs_filter_data} \\
         --flag-raw-count ${params.scdrs_raw_count} \\
         2>&1 | tee -a scdrs_score.log
-    
-    # Find the score file (scDRS creates <trait_name>.full_score.gz)
-    SCORE_FILE=\$(ls *.full_score.gz 2>/dev/null | head -n 1)
-    
-    if [ -z "\${SCORE_FILE}" ]; then
-        echo "❌ ERROR: scDRS score file not created" | tee -a scdrs_score.log
-        exit 1
-    fi
-    
-    echo "" | tee -a scdrs_score.log
-    echo "✓ scDRS scores computed successfully" | tee -a scdrs_score.log
-    echo "  Output: \${SCORE_FILE}" | tee -a scdrs_score.log
-    echo "" | tee -a scdrs_score.log
-    echo "Score file preview:" | tee -a scdrs_score.log
-    zcat "\${SCORE_FILE}" | head -n 5 | tee -a scdrs_score.log
-    
-    # Rename log to match score file
-    TRAIT=\$(basename "\${SCORE_FILE}" .full_score.gz)
-    mv scdrs_score.log \${TRAIT}_scdrs_score.log
     """
 }

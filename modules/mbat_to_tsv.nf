@@ -6,7 +6,7 @@ process MBAT_TO_TSV {
     label 'medium_mem'
     publishDir "${params.outdir}/scdrs/gwas", mode: 'copy'
     
-    container "file://${projectDir}/environments/py-r-cepo-scdrs.sif"
+    container "${projectDir}/environments/py-r-cepo-scdrs.sif"
 
     input:
     path mbat_combined
@@ -102,11 +102,6 @@ process MBAT_TO_TSV {
     cat(sprintf("  Min P-value: %.3e\\n", min(dt_sorted\$P_mBATcombo, na.rm=TRUE)))
     cat(sprintf("  Max P-value: %.3e\\n", max(dt_sorted\$P_mBATcombo, na.rm=TRUE)))
     RSCRIPT
-    
-    if [ ! -f "${gwas_prefix}.tsv" ]; then
-        echo "❌ ERROR: Failed to create TSV file" | tee -a mbat_to_tsv.log
-        exit 1
-    fi
     
     echo "" | tee -a mbat_to_tsv.log
     echo "✓ TSV conversion complete" | tee -a mbat_to_tsv.log

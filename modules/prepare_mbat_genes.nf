@@ -4,7 +4,7 @@
 process PREPARE_MBAT_GENES {
     tag "mbat_gene_list"
     label 'low_mem'
-    publishDir "${params.outdir}/scdrs/gwas", mode: 'copy'
+    publishDir "${params.outdir}/scdrs/mbat", mode: 'copy'
     
     input:
     path gene_coords
