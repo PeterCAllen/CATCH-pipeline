@@ -6,7 +6,7 @@ process RUN_SCDRS_DOWNSTREAM {
     label 'high_mem'
     publishDir "${params.outdir}/scdrs/results", mode: 'copy'
     
-    container "${projectDir}/environments/py-r-cepo-scdrs.sif"
+    container "${projectDir}/environments/scDRS_v1.0.4.sif"
 
     input:
     tuple path(h5ad), path(score_file)
