@@ -75,7 +75,7 @@ workflow LDSC {
             def weights_dir  = is_hg38 ? "${params.ref_base_dir}/hg38/weights"  : "${params.ref_base_dir}/hg19/weights"
             [
                 plink_dir: is_hg38 ? params.ref_hg38_plink_dir : params.ref_hg19_plink_dir,
-                plink_prefix: is_hg38 ? "1000G.EUR.hg38" : "1000G.EUR.QC",
+                plink_prefix: is_hg38 ? "1000G.EUR.hg38" : "1000G.EUR.hg19",
                 hapmap3: is_hg38 ? params.ref_hg38_hapmap3 : params.ref_hg19_hapmap3,
                 baseline_dir: baseline_dir,
                 weights_dir: weights_dir
@@ -285,4 +285,5 @@ workflow LDSC {
         bed_dir     = CREATE_CONTINUOUS_BEDS.out.bed_dir
         results     = RUN_SLDSC.out.results
         quantile_results = COMPUTE_QUANTILE_H2G.out.quantile_results
+        annotation_comparison = COMPARE_ANNOTATIONS.out.comparison_table
 }

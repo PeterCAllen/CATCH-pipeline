@@ -5,8 +5,8 @@ process RUN_SCDRS_DOWNSTREAM {
     tag "${score_file.simpleName}"
     label 'high_mem'
     publishDir "${params.outdir}/scdrs/results", mode: 'copy'
-    
-    container "${projectDir}/environments/scDRS_v1.0.4.sif"
+
+    container "${projectDir}/environments/scdrs_v1.0.2.sif"
 
     input:
     tuple path(h5ad), path(score_file)
@@ -25,6 +25,8 @@ process RUN_SCDRS_DOWNSTREAM {
     echo "Cell type column: ${params.cell_type_col}" | tee -a scdrs_downstream.log
     echo "" | tee -a scdrs_downstream.log
     
+    export NUMBA_CACHE_DIR=/tmp
+
     scdrs perform-downstream \\
         --h5ad-file "${h5ad}" \\
         --score-file ./"${score_file}" \\

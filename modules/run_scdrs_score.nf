@@ -6,7 +6,7 @@ process RUN_SCDRS_SCORE {
     label 'high_mem'
     publishDir "${params.outdir}/scdrs/scores", mode: 'copy'
     
-    container "${projectDir}/environments/scDRS_v1.0.4.sif"
+    container "${projectDir}/environments/scdrs_v1.0.2.sif"
 
     input:
     tuple path(h5ad), path(geneset)
@@ -27,6 +27,8 @@ process RUN_SCDRS_SCORE {
     echo "Raw count: ${params.scdrs_raw_count}" | tee -a scdrs_score.log
     echo "" | tee -a scdrs_score.log
     
+    export NUMBA_CACHE_DIR=/tmp
+
     scdrs compute-score \\
         --h5ad-file "${h5ad}" \\
         --h5ad-species human \\

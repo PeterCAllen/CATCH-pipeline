@@ -7,6 +7,7 @@ include { RUN_CEPO            } from './modules/run_cepo'
 include { MAGMA               } from './subworkflows/magma'
 include { LDSC                } from './subworkflows/ldsc'
 include { SCDRS               } from './subworkflows/scdrs'
+include { COMBINE_CAUCHY      } from './modules/combine_cauchy'
 
 // Validate required parameters
 def validateParams() {
@@ -51,7 +52,6 @@ workflow {
      genome_build     : ${genome_build}
      gwas_sample_size : ${params.gwas_sample_size}
      cell_type_col    : ${params.cell_type_col}
-     gene_matrix      : ${params.gene_matrix}
      
      Analysis Options:
      -----------------
@@ -141,15 +141,32 @@ workflow {
             ch_genome_build
         )
     }
+
+    // --- 7. Combine P-values from All Methods (if all three are enabled) ---
+    if (params.run_ldsc && params.run_magma && params.run_scdrs) {
+        // Extract h5ad basename for dataset name
+        def h5ad_name = file(params.h5ad_input).baseName.replaceAll(/\.h5ad$/, '')
+        
+        COMBINE_CAUCHY(
+            LDSC.out.annotation_comparison,
+            MAGMA.out.gsa_results.first(),
+            SCDRS.out.group_results.flatten().filter { it.name.contains('.scdrs_group') }.first(),
+            h5ad_name,
+            params.gwas_name
+        )
+    }
 }
 
 workflow.onComplete {
+    def combined_msg = (params.run_ldsc && params.run_magma && params.run_scdrs) ? 
+        "\n     Combined results: ${params.outdir}/combined/${params.gwas_name}_cauchy_combined.tsv" : ""
+    
     log.info """
     =====================================================
      Pipeline completed at: ${workflow.complete}
      Execution status: ${workflow.success ? 'SUCCESS' : 'FAILED'}
      Duration: ${workflow.duration}
-     Results: ${params.outdir}
+     Results: ${params.outdir}${combined_msg}
     =====================================================
     """.stripIndent()
 }

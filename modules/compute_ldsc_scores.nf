@@ -23,7 +23,7 @@ process COMPUTE_LDSC_SCORES {
     def prefix = "${cell_type}.${chr}"
     def plink_prefix = (genome_build in ['hg38', 'GRCh38']) 
         ? "1000G.EUR.hg38"
-        : "1000G.EUR.QC"
+        : "1000G.EUR.hg19"
     def bfile = "${plink_prefix}.${chr}"
     
     // LDSC parameters

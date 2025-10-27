@@ -24,7 +24,7 @@ process RUN_MAGMA {
     // Files are staged directly in work directory, we'll use them from there
     def ref_prefix = (genome_build in ['hg38', 'GRCh38']) ? 
         '1000G.EUR.hg38' : 
-        '1000G.EUR.QC'
+        '1000G.EUR.hg19'
     
     """
     echo "================================================================"
@@ -85,7 +85,7 @@ process RUN_MAGMA {
     echo ""
     
     # The combined BIM file is staged into work directory - find it
-    # It will have the full name like "1000G.EUR.hg38.bim" or "1000G.EUR.QC.bim"
+    # It will have the full name like "1000G.EUR.hg38.bim" or "1000G.EUR.hg19.bim"
     COMBINED_BIM="\$(ls ${ref_prefix}.bim 2>/dev/null || echo "")"
     
     if [ -z "\$COMBINED_BIM" ] || [ ! -f "\$COMBINED_BIM" ]; then

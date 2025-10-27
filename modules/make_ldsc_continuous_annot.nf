@@ -30,7 +30,7 @@ process MAKE_LDSC_CONTINUOUS_ANNOT {
     // The plink_files are staged, so we use the basename
     def plink_prefix = (genome_build in ['hg38', 'GRCh38']) 
         ? "1000G.EUR.hg38"
-        : "1000G.EUR.QC"
+        : "1000G.EUR.hg19"
     
     def bim_file = "${plink_prefix}.${chr}.bim"
     def bfile = "${plink_prefix}.${chr}"

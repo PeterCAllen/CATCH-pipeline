@@ -24,7 +24,7 @@ process CREATE_LDSC_ANNOT {
     def prefix = "${cell_type}.${chr}"
     def plink_prefix = (genome_build in ['hg38', 'GRCh38']) 
         ? "1000G.EUR.hg38"
-        : "1000G.EUR.QC"
+        : "1000G.EUR.hg19"
     def bim_file = "${plink_prefix}.${chr}.bim"
     
     """

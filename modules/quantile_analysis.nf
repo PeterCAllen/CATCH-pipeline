@@ -18,7 +18,7 @@ process COMPUTE_QUANTILE_M {
     path "${cell_type}_quantile_m.log", emit: log
 
     script:
-    def frq_prefix = (genome_build in ['hg38', 'GRCh38']) ? '1000G.EUR.hg38' : '1000G.EUR.QC'
+    def frq_prefix = (genome_build in ['hg38', 'GRCh38']) ? '1000G.EUR.hg38' : '1000G.EUR.hg19'
     
     """
     echo "========================================"

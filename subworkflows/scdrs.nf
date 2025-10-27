@@ -28,7 +28,7 @@ workflow SCDRS {
             def is_hg38 = (build in ['hg38', 'GRCh38'])
             [
                 plink_dir: is_hg38 ? params.ref_hg38_plink_dir : params.ref_hg19_plink_dir,
-                plink_prefix: is_hg38 ? "1000G.EUR.hg38" : "1000G.EUR.QC",
+                plink_prefix: is_hg38 ? "1000G.EUR.hg38" : "1000G.EUR.hg19",
                 bim_file: is_hg38 ? params.ref_hg38_bim_file : params.ref_hg19_bim_file
             ]
         }
