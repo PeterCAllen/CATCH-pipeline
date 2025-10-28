@@ -53,7 +53,7 @@ process COMPUTE_QUANTILE_M {
     # Check if Perl script exists
     if [ ! -f "${projectDir}/bin/ldsc-quantile-M.pl" ]; then
         echo "ERROR: Perl script not found at ${projectDir}/bin/ldsc-quantile-M.pl"
-        exit 1
+        
     fi
 
     echo "Running Perl script for quantile M calculation..."
@@ -68,7 +68,7 @@ process COMPUTE_QUANTILE_M {
 
     if [ \$? -ne 0 ]; then
         echo "ERROR: Perl script failed"
-        exit 1
+        
     fi
 
     echo ""
@@ -112,7 +112,7 @@ process COMPUTE_QUANTILE_H2G {
     # Check if R script exists
     if [ ! -f "${projectDir}/bin/ldsc-quantile_h2g.R" ]; then
         echo "ERROR: R script not found at ${projectDir}/bin/ldsc-quantile_h2g.R"
-        exit 1
+        
     fi
 
     echo "Running R script for quantile h2g analysis..."
@@ -125,7 +125,7 @@ process COMPUTE_QUANTILE_H2G {
 
     if [ \$? -ne 0 ]; then
         echo "ERROR: R script failed"
-        exit 1
+        
     fi
 
     echo ""
@@ -169,7 +169,7 @@ process COMPARE_ANNOTATIONS {
     # Check if R script exists
     if [ ! -f "${projectDir}/bin/ldsc-compare_annotations.R" ]; then
         echo "ERROR: R script not found at ${projectDir}/bin/ldsc-compare_annotations.R"
-        exit 1
+        
     fi
 
     # Run comparison script

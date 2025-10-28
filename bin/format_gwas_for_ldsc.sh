@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# set -euo pipefail
+# Note: Not using 'set -euo pipefail' to avoid SIGPIPE errors when awk exits early
 
 # Usage: format_gwas_for_ldsc.sh <GWAS_FILE> <BIM_FILE> <OUTPUT_PREFIX>
 #   GWAS_FILE: path to input GWAS summary stats (gzipped)
@@ -19,7 +19,7 @@ echo "" >&2
 
 # First pass: detect if file has rsIDs by checking first SNP value
 echo "Analyzing GWAS file format..." >&2
-FIRST_SNP=$(gunzip -c ${GWAS_FILE} | awk '
+FIRST_SNP=$(gunzip -c ${GWAS_FILE} 2>/dev/null | awk '
 NR==1 {
     # Find SNP column in header
     for(i=1; i<=NF; i++) {
@@ -36,7 +36,7 @@ NR==2 {
         print $snp_col;
     }
     exit;
-}')
+}' || true)
 
 echo "  First SNP detected: ${FIRST_SNP}" >&2
 

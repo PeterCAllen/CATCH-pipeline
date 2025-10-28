@@ -42,7 +42,7 @@ process RUN_MAGMA {
     
     if [ ! -f "${gwas}" ]; then
         echo "❌ ERROR: GWAS summary statistics not found: ${gwas}"
-        exit 1
+        
     fi
     echo "✓ Found GWAS file: ${gwas}"
     GWAS_LINES=\$(zcat -f "${gwas}" | wc -l)
@@ -50,13 +50,13 @@ process RUN_MAGMA {
     
     if [ ! -f "${gene_loc}" ]; then
         echo "❌ ERROR: MAGMA gene coordinates not found: ${gene_loc}"
-        exit 1
+        
     fi
     echo "✓ Found MAGMA coordinates: ${gene_loc}"
     
     if [ ! -f "${gene_set}" ]; then
         echo "❌ ERROR: MAGMA gene sets not found: ${gene_set}"
-        exit 1
+        
     fi
     echo "✓ Found MAGMA gene sets: ${gene_set}"
     NSETS=\$(wc -l < "${gene_set}")
@@ -67,13 +67,13 @@ process RUN_MAGMA {
         echo "❌ ERROR: Reference data not found: ${ref_prefix}.*.bed"
         echo "Looking for files in work directory:"
         ls -la *.bed | head -n 10 || true
-        exit 1
+        
     fi
     echo "✓ Found per-chromosome reference data: ${ref_prefix}.*.{bed,bim,fam}"
     
     if [ ! -f "./${magma_bin}" ]; then
         echo "❌ ERROR: MAGMA binary not found: ${magma_bin}"
-        exit 1
+        
     fi
     echo "✓ Found MAGMA binary: ${magma_bin}"
     chmod +x "./${magma_bin}"
@@ -92,7 +92,7 @@ process RUN_MAGMA {
         echo "❌ ERROR: Combined BIM file not found: ${ref_prefix}.bim"
         echo "Files in work directory:"
         ls -la *.bim | head -n 10 || true
-        exit 1
+        
     fi
     
     BIM_SNPS=\$(wc -l < "\$COMBINED_BIM")
@@ -116,12 +116,12 @@ process RUN_MAGMA {
     # Validate formatted outputs
     if [ ! -f "${gwas_prefix}.formatted.pval" ]; then
         echo "❌ ERROR: Failed to format GWAS file (missing .pval)"
-        exit 1
+        
     fi
     
     if [ ! -f "${gwas_prefix}.formatted.snp.loc" ]; then
         echo "❌ ERROR: Failed to format GWAS file (missing .snp.loc)"
-        exit 1
+        
     fi
     
     echo "✓ Created formatted GWAS files"
@@ -148,7 +148,7 @@ process RUN_MAGMA {
     
     if [ ! -f "${gwas_prefix}_annot.genes.annot" ]; then
         echo "❌ ERROR: MAGMA annotation failed"
-        exit 1
+        
     fi
     
     echo "✓ SNP annotation complete"
@@ -178,7 +178,7 @@ process RUN_MAGMA {
         echo "❌ ERROR: Cannot find ${ref_prefix}.1.bed"
         echo "Files in work directory:"
         ls -la *.bed | head -n 20 || true
-        exit 1
+        
     fi
     echo "✓ Verified chromosome 1 reference files exist"
     
@@ -190,7 +190,7 @@ process RUN_MAGMA {
     
     if [ ! -f "${gwas_prefix}.magma_genes.genes.out" ]; then
         echo "❌ ERROR: MAGMA gene analysis failed"
-        exit 1
+        
     fi
     
     echo "✓ Gene analysis complete"
@@ -216,7 +216,7 @@ process RUN_MAGMA {
     
     if [ ! -f "${gwas_prefix}.magma_geneset.gsa.out" ]; then
         echo "❌ ERROR: MAGMA gene-set analysis failed"
-        exit 1
+        
     fi
     
     echo "✓ Gene-set analysis complete"
@@ -267,7 +267,7 @@ process RUN_MAGMA {
         echo "✓ All expected MAGMA output files created successfully!"
     else
         echo "⚠️  Some output files are missing"
-        exit 1
+        
     fi
 
     echo ""

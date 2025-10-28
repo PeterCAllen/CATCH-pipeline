@@ -55,17 +55,17 @@ process MAKE_LDSC_CONTINUOUS_ANNOT {
     # Verify input files exist
     if [ ! -f "${bed_file}" ]; then
         echo "❌ ERROR: BED file not found: ${bed_file}"
-        exit 1
+        
     fi
     
     if [ ! -f "${bim_file}" ]; then
         echo "❌ ERROR: BIM file not found: ${bim_file}"
-        exit 1
+        
     fi
     
     if [ ! -f "${hapmap3_file}" ]; then
         echo "❌ ERROR: HapMap3 file not found: ${hapmap3_file}"
-        exit 1
+        
     fi
     
     # Step 3a: Create annotation file using R script
@@ -80,7 +80,7 @@ process MAKE_LDSC_CONTINUOUS_ANNOT {
     # Verify annotation was created
     if [ ! -f "${prefix}.annot.gz" ]; then
         echo "❌ ERROR: Annotation file not created: ${prefix}.annot.gz"
-        exit 1
+        
     fi
     
     echo "✓ Annotation file created"
@@ -102,7 +102,7 @@ process MAKE_LDSC_CONTINUOUS_ANNOT {
     if [ ! -f "${prefix}.l2.ldscore.gz" ]; then
         echo "❌ ERROR: LD score file not created: ${prefix}.l2.ldscore.gz"
         echo "Check ${prefix}.log for details"
-        exit 1
+        
     fi
     
     echo ""

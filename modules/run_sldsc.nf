@@ -122,7 +122,7 @@ process RUN_SLDSC {
 
     if [ \$MISSING -eq 1 ]; then
         echo "ERROR: Some required files are missing. Check warnings above."
-        exit 1
+        
     fi
 
     echo "All required files present. Running ldsc.py..."

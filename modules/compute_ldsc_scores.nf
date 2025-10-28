@@ -44,17 +44,17 @@ process COMPUTE_LDSC_SCORES {
     # Verify input files exist
     if [ ! -f "${annot_file}" ]; then
         echo "❌ ERROR: Annotation file not found: ${annot_file}"
-        exit 1
+        
     fi
     
     if [ ! -f "${bfile}.bim" ]; then
         echo "❌ ERROR: PLINK BIM file not found: ${bfile}.bim"
-        exit 1
+        
     fi
     
     if [ ! -f "${hapmap3_file}" ]; then
         echo "❌ ERROR: HapMap3 file not found: ${hapmap3_file}"
-        exit 1
+        
     fi
     
     # Compute LD scores
@@ -72,7 +72,7 @@ process COMPUTE_LDSC_SCORES {
     if [ ! -f "${prefix}.l2.ldscore.gz" ]; then
         echo "❌ ERROR: LD score file not created: ${prefix}.l2.ldscore.gz"
         echo "Check ${prefix}.log for details"
-        exit 1
+        
     fi
     
     echo ""

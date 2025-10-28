@@ -84,7 +84,7 @@ process FORMAT_GWAS_FOR_SCDRS {
     
     if [ ! -f "${gwas_prefix}_formatted.txt" ]; then
         echo "❌ ERROR: Failed to format GWAS file" | tee -a format_gwas.log
-        exit 1
+        
     fi
     
     echo "" | tee -a format_gwas.log

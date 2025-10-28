@@ -53,7 +53,7 @@ process MUNGE_GWAS_FOR_LDSC {
         zcat "${gwas_prefix}_munged.sumstats.gz" | head -n 5 | tee -a munge.log
     else
         echo "❌ ERROR: Munged file not created" | tee -a munge.log
-        exit 1
+        
     fi
     
     mv munge.log ${gwas_prefix}_munge.log

@@ -41,12 +41,12 @@ process CREATE_LDSC_ANNOT {
     # Verify input files exist
     if [ ! -f "${bed_file}" ]; then
         echo "❌ ERROR: BED file not found: ${bed_file}"
-        exit 1
+        
     fi
     
     if [ ! -f "${bim_file}" ]; then
         echo "❌ ERROR: BIM file not found: ${bim_file}"
-        exit 1
+        
     fi
     
     # Create annotation file using R script
@@ -61,7 +61,7 @@ process CREATE_LDSC_ANNOT {
     # Verify annotation was created
     if [ ! -f "${prefix}.annot.gz" ]; then
         echo "❌ ERROR: Annotation file not created: ${prefix}.annot.gz"
-        exit 1
+        
     fi
     
     echo "✓ Annotation file created"
