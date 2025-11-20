@@ -21,22 +21,21 @@ workflow SCDRS {
         h5ad_file           // Single-cell h5ad file
         gene_coords         // Gene coordinates (for CEPO/scDRS)
         genome_build        // hg19 or hg38
+        cov_file            // Covariate file (optional)
 
     main:
-        // Determine reference paths based on genome build (similar to LDSC approach)
-        ch_ref_params = genome_build.map { build ->
-            def is_hg38 = (build in ['hg38', 'GRCh38'])
-            [
-                plink_dir: is_hg38 ? params.ref_hg38_plink_dir : params.ref_hg19_plink_dir,
-                plink_prefix: is_hg38 ? "1000G.EUR.hg38" : "1000G.EUR.hg19",
-                bim_file: is_hg38 ? params.ref_hg38_bim_file : params.ref_hg19_bim_file
-            ]
-        }
+        // Always use hg19 reference paths (coordinates are automatically converted)
+        // Extract the prefix filename from the full path
+        def plink_prefix_name = new File(params.ref_hg19_plink_prefix).name
+        
+        ch_ref_params = Channel.value([
+            plink_dir: params.ref_hg19_plink_dir,
+            plink_prefix: plink_prefix_name,
+            bim_file: params.ref_hg19_bim_file
+        ])
         
         // Extract BIM file for FORMAT_GWAS_FOR_SCDRS
-        ch_ref_bim = ch_ref_params.map { params_map ->
-            file(params_map.bim_file, checkIfExists: true)
-        }
+        ch_ref_bim = Channel.value(file(params.ref_hg19_bim_file, checkIfExists: true))
         
         // ================================================================================
         // STEP 0: Format GWAS Summary Statistics for mBAT
@@ -124,9 +123,10 @@ workflow SCDRS {
         // ================================================================================
         // Calculate disease relevance scores for each cell
         
-        // Combine h5ad with geneset
+        // Combine h5ad with geneset and covariate file
         ch_score_input = h5ad_file
             .combine(MUNGE_SCDRS_GENESET.out.geneset)
+            .combine(cov_file)
         
         RUN_SCDRS_SCORE(ch_score_input)
 
@@ -135,9 +135,10 @@ workflow SCDRS {
         // ================================================================================
         // Cell type association testing
         
-        // Combine h5ad with score file
+        // Combine h5ad with score file and covariate file
         ch_downstream_input = h5ad_file
             .combine(RUN_SCDRS_SCORE.out.score_file)
+            .combine(cov_file)
         
         RUN_SCDRS_DOWNSTREAM(ch_downstream_input)
 

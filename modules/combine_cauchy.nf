@@ -17,7 +17,7 @@ process COMBINE_CAUCHY {
     output:
     path "${gwas_name}_cauchy_combined.tsv", emit: combined_results
     path "cauchy_combination.log", emit: log
-    path "*_cauchy_acato_fdr_plot.png", emit: plot_file
+    path "*_cauchy_fdr_plot.png", emit: plot_file
 
     script:
     """

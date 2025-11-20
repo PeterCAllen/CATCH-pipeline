@@ -34,6 +34,6 @@ process MAKE_LDSC_ANNOTS {
         --thin-annot \\
         --annot "${celltype}.${chr}.annot.gz" \\
         --out "${celltype}.${chr}" \\
-        --print-snps "${ldsc_ref_dir}/baselineLD_v2.2/hm3_no_MHC.list.txt"
+        --print-snps "${params.ref_hg19_hapmap3}"
     """
 }

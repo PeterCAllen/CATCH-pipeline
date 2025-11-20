@@ -20,11 +20,10 @@ process RUN_MAGMA {
     script:
     def gwas_prefix = gwas.getBaseName().replaceAll(/\.(txt\.gz|txt|gz)$/, '')
     
-    // Reference prefix for per-chromosome files (MAGMA will find them automatically)
-    // Files are staged directly in work directory, we'll use them from there
-    def ref_prefix = (genome_build in ['hg38', 'GRCh38']) ? 
-        '1000G.EUR.hg38' : 
-        '1000G.EUR.hg19'
+    // Always use hg19 reference (coordinates are automatically converted)
+    // MAGMA needs the combined file (all chromosomes), not per-chromosome
+    // Extract the prefix filename from the full path
+    def ref_prefix = new File(params.ref_hg19_plink_combined).name
     
     """
     echo "================================================================"

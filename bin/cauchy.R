@@ -36,9 +36,9 @@ cat("Dataset       :", dataset_name, "\n")
 cat("GWAS trait    :", gwas_prefix, "\n")
 cat("\n")
 
-# ---- ACATO Function ----
+# ---- cauchy Function ----
 # Aggregated Cauchy Association Test for combining p-values
-ACATO <- function(p) {
+cauchy <- function(p) {
   if (all(is.na(p))) {
     return(NA)
   }
@@ -143,27 +143,27 @@ if (nrow(merged_data) == 0) {
 }
 cat("\n")
 
-# ---- Calculate ACATO combined p-value ----
+# ---- Calculate cauchy combined p-value ----
 cat("Computing Cauchy combined p-values...\n")
 
-merged_data[, P_ACATO := {
+merged_data[, CAUCHY_P := {
   pvals <- c(ldsc_pval, magma_pval, scdrs_pval)
-  ACATO(pvals)
+  cauchy(pvals)
 }, by = 1:nrow(merged_data)]
 
-cat("✓ Computed ACATO p-values\n")
+cat("✓ Computed cauchy p-values\n")
 cat("\n")
 
 # ---- Add metadata columns ----
 merged_data[, `:=`(dataset = dataset_name, trait = gwas_prefix)]
 
 # Reorder columns for clarity
-setcolorder(merged_data, c("group", "dataset", "trait", "ldsc_pval", "magma_pval", "scdrs_pval", "P_ACATO"))
+setcolorder(merged_data, c("group", "dataset", "trait", "ldsc_pval", "magma_pval", "scdrs_pval", "CAUCHY_P"))
 
 
-# ---- Plot ACATO p-values ----
+# ---- Plot cauchy p-values ----
 merged_data <- merged_data %>%
-    mutate(assoc_fdr_0.05 = p.adjust(P_ACATO, method = "fdr"),
+    mutate(assoc_fdr_0.05 = p.adjust(CAUCHY_P, method = "fdr"),
            assoc_fdr_0.05_fig = cut(
             assoc_fdr_0.05,
             breaks = c(-Inf, 0.001, 0.05, 0.1, 1),
@@ -187,7 +187,7 @@ p1 <- ggplot(merged_data, aes(x = group, y = -log10(assoc_fdr_0.05), fill = grou
   )
 
 ggsave(
-  filename = paste0(gwas_prefix, "_cauchy_acato_fdr_plot.png"),
+  filename = paste0(gwas_prefix, "_cauchy_cauchy_fdr_plot.png"),
   plot = p1,
   dpi = 300
 )
@@ -200,11 +200,11 @@ cat("========================================\n")
 cat("Results Summary\n")
 cat("========================================\n")
 cat("Cell types analyzed:", nrow(merged_data), "\n")
-cat("Significant (P_ACATO < 0.05):", sum(merged_data$P_ACATO < 0.05, na.rm = TRUE), "\n")
+cat("Significant (CAUCHY_P < 0.05):", sum(merged_data$CAUCHY_P < 0.05, na.rm = TRUE), "\n")
 cat("\n")
-cat("Top 10 cell types by ACATO p-value:\n")
-top_results <- merged_data[order(P_ACATO)][1:min(10, nrow(merged_data))]
-print(top_results[, .(group, ldsc_pval, magma_pval, scdrs_pval, P_ACATO)])
+cat("Top 10 cell types by cauchy p-value:\n")
+top_results <- merged_data[order(CAUCHY_P)][1:min(10, nrow(merged_data))]
+print(top_results[, .(group, ldsc_pval, magma_pval, scdrs_pval, CAUCHY_P)])
 cat("\n")
 cat("✓ Saved combined results to:", output_file, "\n")
 cat("========================================\n")

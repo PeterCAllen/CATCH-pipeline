@@ -114,58 +114,79 @@ if [[ "$FIRST_SNP" =~ ^rs[0-9]+ ]]; then
         # Create rsID -> CHR:BP mapping from reference BIM file
         awk '{print $2, $1, $4}' ${BIM_FILE} > rsid_to_pos.map
         
-        # Create .pval file
-        gunzip -c ${GWAS_FILE} | awk '
-        NR==1 {
-            # Detect column positions
-            for(i=1; i<=NF; i++) {
-                col_name = toupper($i);
-                if(col_name == "SNP" || col_name == "RSID" || col_name == "RS" || col_name == "SNPID" || col_name == "MARKERNAME") snp_col = i;
-                if(col_name == "P" || col_name == "PVAL" || col_name == "P_VALUE" || col_name == "PVALUE") p_col = i;
-                if(col_name == "N" || col_name == "NEFF" || col_name == "N_TOTAL") n_col = i;
+        # Check for P-value or Z-score column
+        HAS_P=$(gunzip -c ${GWAS_FILE} 2>/dev/null | awk 'NR==1{for(i=1;i<=NF;i++){if(toupper($i) ~ /^P(_VALUE)?$|^PVAL$/) {print "yes"; exit}}}')
+        HAS_Z=$(gunzip -c ${GWAS_FILE} 2>/dev/null | awk 'NR==1{for(i=1;i<=NF;i++){if(toupper($i) == "Z") {print "yes"; exit}}}')
+
+        if [[ "$HAS_P" == "yes" ]]; then
+            # Create .pval file directly
+            gunzip -c ${GWAS_FILE} | awk '
+            NR==1 {
+                # Detect column positions
+                for(i=1; i<=NF; i++) {
+                    col_name = toupper($i);
+                    if(col_name == "SNP" || col_name == "RSID" || col_name == "RS" || col_name == "SNPID" || col_name == "MARKERNAME") snp_col = i;
+                    if(col_name == "P" || col_name == "PVAL" || col_name == "P_VALUE" || col_name == "PVALUE") p_col = i;
+                    if(col_name == "N" || col_name == "NEFF" || col_name == "N_TOTAL") n_col = i;
+                }
+                print "SNP", "P", "N";
+                next;
             }
-            print "SNP", "P", "N";
+            NR>1 {
+                snp_val = $snp_col;
+                p_val = $p_col;
+                n_val = $n_col;
+                
+                if(p_val != "" && p_val > 0 && p_val <= 1 && n_val != "") {
+                    print snp_val, p_val, n_val;
+                }
+            }' > ${PREFIX}.pval
+        elif [[ "$HAS_Z" == "yes" ]]; then
+            echo "  ✓ Found Z-score column, converting to P-value..." >&2
+            # Create intermediate file with SNP, Z, N and then convert
+            gunzip -c ${GWAS_FILE} | awk '
+            BEGIN {OFS="\t"}
+            NR==1 {
+                # Detect column positions
+                for(i=1; i<=NF; i++) {
+                    col_name = toupper($i);
+                    if(col_name == "SNP" || col_name == "RSID" || col_name == "RS" || col_name == "SNPID" || col_name == "MARKERNAME") snp_col = i;
+                    if(col_name == "Z") z_col = i;
+                    if(col_name == "N" || col_name == "NEFF" || col_name == "N_TOTAL") n_col = i;
+                }
+                print "SNP", "Z", "N";
+                next;
+            }
+            NR>1 {
+                snp_val = $snp_col;
+                z_val = $z_col;
+                n_val = $n_col;
+                
+                if(z_val != "" && n_val != "") {
+                    print snp_val, z_val, n_val;
+                }
+            }' | z_to_p.R > ${PREFIX}.pval
+        else
+            echo "  ✗ ERROR: GWAS file must have a P-value (P, PVAL, P_VALUE) or Z-score (Z) column." >&2
+            exit 1
+        fi
+
+        # Create .snp.loc file using the reference mapping and the new .pval file
+        awk '
+        FNR==NR {
+            # From rsid_to_pos.map
+            rsid_chr[$1] = $2;
+            rsid_bp[$1] = $3;
             next;
         }
-        NR>1 {
-            snp_val = $snp_col;
-            p_val = $p_col;
-            n_val = $n_col;
+        FNR>1 {
+            # Body of .pval file (SNP P N)
+            snp_val = $1;
             
-            if(p_val != "" && p_val > 0 && p_val <= 1 && n_val != "") {
-                print snp_val, p_val, n_val;
-            }
-        }' > ${PREFIX}.pval
-        
-        # Create .snp.loc file using the reference mapping
-        gunzip -c ${GWAS_FILE} | awk '
-        BEGIN {
-            # Load rsID to position mapping
-            while((getline line < "rsid_to_pos.map") > 0) {
-                split(line, arr, " ");
-                rsid_chr[arr[1]] = arr[2];
-                rsid_bp[arr[1]] = arr[3];
-            }
-            close("rsid_to_pos.map");
-        }
-        NR==1 {
-            # Detect column positions
-            for(i=1; i<=NF; i++) {
-                col_name = toupper($i);
-                if(col_name == "SNP" || col_name == "RSID" || col_name == "RS" || col_name == "SNPID" || col_name == "MARKERNAME") snp_col = i;
-                if(col_name == "P" || col_name == "PVAL" || col_name == "P_VALUE" || col_name == "PVALUE") p_col = i;
-            }
-            next;  # No header in .snp.loc
-        }
-        NR>1 {
-            snp_val = $snp_col;
-            p_val = $p_col;
-            
-            # Look up position from reference
-            if(p_val != "" && p_val > 0 && p_val <= 1 && snp_val in rsid_chr) {
+            if(snp_val in rsid_chr) {
                 print snp_val, rsid_chr[snp_val], rsid_bp[snp_val];
             }
-        }' > ${PREFIX}.snp.loc
+        }' rsid_to_pos.map ${PREFIX}.pval > ${PREFIX}.snp.loc
         
         rm -f rsid_to_pos.map
     fi
@@ -178,17 +199,14 @@ else
     awk '{print $1":"$4, $2}' ${BIM_FILE} > pos_to_rsid.map
     
     # Create p-value file with rsIDs
-    gunzip -c ${GWAS_FILE} | awk '
-    BEGIN {
-        while((getline line < "pos_to_rsid.map") > 0) {
-            split(line, arr, " ");
-            pos_rsid[arr[1]] = arr[2];
-        }
-        close("pos_to_rsid.map");
-        print "SNP", "P", "N";
+    awk '
+    FNR==NR {
+        # From pos_to_rsid.map
+        pos_rsid[$1] = $2;
+        next;
     }
-    NR==1 {
-        # Detect column positions
+    FNR==1 {
+        # Header of GWAS file
         for(i=1; i<=NF; i++) {
             col_name = toupper($i);
             if(col_name == "CHR") chr_col = i;
@@ -196,26 +214,26 @@ else
             if(col_name == "P" || col_name == "PVAL" || col_name == "P_VALUE" || col_name == "PVALUE") p_col = i;
             if(col_name == "N" || col_name == "NEFF" || col_name == "N_TOTAL") n_col = i;
         }
+        print "SNP", "P", "N";
         next;
     }
-    NR>1 {
+    {
+        # Body of GWAS file
         pos_id = $chr_col":"$bp_col;
         if(pos_id in pos_rsid && $p_col != "" && $p_col > 0 && $p_col <= 1 && $n_col != "") {
             print pos_rsid[pos_id], $p_col, $n_col;
         }
-    }' > ${PREFIX}.pval
+    }' pos_to_rsid.map <(gunzip -c ${GWAS_FILE}) > ${PREFIX}.pval
     
     # Create SNP location file with rsIDs
-    gunzip -c ${GWAS_FILE} | awk '
-    BEGIN {
-        while((getline line < "pos_to_rsid.map") > 0) {
-            split(line, arr, " ");
-            pos_rsid[arr[1]] = arr[2];
-        }
-        close("pos_to_rsid.map");
+    awk '
+    FNR==NR {
+        # From pos_to_rsid.map
+        pos_rsid[$1] = $2;
+        next;
     }
-    NR==1 {
-        # Detect column positions
+    FNR==1 {
+        # Header of GWAS file
         for(i=1; i<=NF; i++) {
             col_name = toupper($i);
             if(col_name == "CHR") chr_col = i;
@@ -224,12 +242,13 @@ else
         }
         next;
     }
-    NR>1 {
+    {
+        # Body of GWAS file
         pos_id = $chr_col":"$bp_col;
         if(pos_id in pos_rsid && $p_col != "" && $p_col > 0 && $p_col <= 1) {
             print pos_rsid[pos_id], $chr_col, $bp_col;
         }
-    }' > ${PREFIX}.snp.loc
+    }' pos_to_rsid.map <(gunzip -c ${GWAS_FILE}) > ${PREFIX}.snp.loc
     
     rm -f pos_to_rsid.map
 fi

@@ -74,13 +74,13 @@ workflow {
     ch_genome_build  = Channel.value(genome_build)
     ch_magma_bin     = Channel.fromPath(params.magma_bin, checkIfExists: true)
     
-    // Determine reference prefix based on genome build
-    def ref_prefix = (genome_build in ['hg38', 'grch38']) ?
-        params.ref_hg38_plink_prefix : params.ref_hg19_plink_prefix
+    // Always use hg19 reference (gene coordinates are converted automatically)
+    def ref_prefix = params.ref_hg19_plink_prefix              // Per-chromosome files
+    def ref_combined = params.ref_hg19_plink_combined          // Combined files for MAGMA
     
     // Create reference file channel for MAGMA
     // Collect all per-chromosome reference files (.bed, .bim, .fam for chr 1-22)
-    // PLUS the combined files (without chromosome number)
+    // PLUS the combined files (for MAGMA to use)
     ch_magma_ref = Channel.from(1..22)
         .flatMap { chr -> 
             [
@@ -91,9 +91,9 @@ workflow {
         }
         .mix(
             Channel.fromPath([
-                "${ref_prefix}.bed",
-                "${ref_prefix}.bim",
-                "${ref_prefix}.fam"
+                "${ref_combined}.bed",
+                "${ref_combined}.bim",
+                "${ref_combined}.fam"
             ], checkIfExists: true)
         )
         .collect()
@@ -134,11 +134,17 @@ workflow {
 
     // --- 6. Run scDRS Subworkflow (if enabled) ---
     if (params.run_scdrs) {
+        // Create covariate channel (optional)
+        ch_scdrs_cov = params.scdrs_cov_file ? 
+            Channel.fromPath(params.scdrs_cov_file, checkIfExists: true) : 
+            Channel.value(file("NO_FILE"))
+        
         SCDRS(
             ch_gwas,
             ch_h5ad,
             PREPARE_GENE_COORDS.out.cepo_coords,
-            ch_genome_build
+            ch_genome_build,
+            ch_scdrs_cov
         )
     }
 

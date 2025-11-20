@@ -10,7 +10,7 @@ process COMPUTE_QUANTILE_M {
           path(annot_files),
           val(genome_build),
           path(baseline_dir),
-          path(plink_dir),
+          path(frq_dir),           // FIXED: Changed from plink_dir to frq_dir
           val(plink_prefix)
 
     output:
@@ -18,7 +18,13 @@ process COMPUTE_QUANTILE_M {
     path "${cell_type}_quantile_m.log", emit: log
 
     script:
-    def frq_prefix = (genome_build in ['hg38', 'GRCh38']) ? '1000G.EUR.hg38' : '1000G.EUR.hg19'
+    // Extract the baseline prefix name from params (e.g., "baseline." from "data/.../baseline.")
+    def baseline_prefix = params.ref_hg19_baseline.substring(params.ref_hg19_baseline.lastIndexOf('/') + 1)
+    // Remove trailing dot if present for use in filenames
+    def baseline_name = baseline_prefix.endsWith('.') ? baseline_prefix.substring(0, baseline_prefix.length() - 1) : baseline_prefix
+    
+    // Determine the correct PLINK prefix
+    def frq_prefix = new File(params.ref_hg19_plink_prefix).name
     
     """
     echo "========================================"
@@ -26,25 +32,34 @@ process COMPUTE_QUANTILE_M {
     echo "========================================"
     echo "Cell type: ${cell_type}"
     echo "Genome build: ${genome_build}"
+    echo "Baseline prefix: ${baseline_name}"
     echo ""
 
     # Stage baseline annotation files
     echo "Staging baseline annotations..."
     for chr in {1..22}; do
-        if [ -f "${baseline_dir}/baselineLD.\${chr}.annot.gz" ]; then
-            ln -sf "${baseline_dir}/baselineLD.\${chr}.annot.gz" .
+        if [ -f "${baseline_dir}/${baseline_name}.\${chr}.annot.gz" ]; then
+            ln -sf "${baseline_dir}/${baseline_name}.\${chr}.annot.gz" .
+        else
+            echo "WARNING: Missing ${baseline_dir}/${baseline_name}.\${chr}.annot.gz"
         fi
     done
 
     # Stage frequency files
     echo "Staging frequency files..."
     for chr in {1..22}; do
-        if [ -f "${plink_dir}/${frq_prefix}.\${chr}.frq" ]; then
-            ln -sf "${plink_dir}/${frq_prefix}.\${chr}.frq" .
+        if [ -f "${frq_dir}/${frq_prefix}.\${chr}.frq" ]; then
+            ln -sf "${frq_dir}/${frq_prefix}.\${chr}.frq" .
+        else
+            echo "WARNING: Missing ${frq_dir}/${frq_prefix}.\${chr}.frq"
         fi
     done
 
-    # Verify annotation files are present
+    # Verify files are present
+    echo ""
+    echo "Staged files in working directory:"
+    ls -lh *.annot.gz 2>/dev/null | head -5
+    ls -lh *.frq 2>/dev/null | head -5
     echo ""
     echo "Cell-type annotation files present:"
     ls -lh ${cell_type}.*.annot.gz 2>/dev/null || echo "WARNING: No annotation files found"
@@ -53,12 +68,21 @@ process COMPUTE_QUANTILE_M {
     # Check if Perl script exists
     if [ ! -f "${projectDir}/bin/ldsc-quantile-M.pl" ]; then
         echo "ERROR: Perl script not found at ${projectDir}/bin/ldsc-quantile-M.pl"
-        
+        exit 1
     fi
 
     echo "Running Perl script for quantile M calculation..."
+    echo "Command: perl ${projectDir}/bin/ldsc-quantile-M.pl \\"
+    echo "  --ref-annot-chr ${baseline_name}.,${cell_type}. \\"
+    echo "  --frqfile-chr ${frq_prefix}. \\"
+    echo "  --annot-header ANNOT \\"
+    echo "  --nb-quantile 5 \\"
+    echo "  --maf 0.05 \\"
+    echo "  --out ${cell_type}.q5.M"
+    echo ""
+    
     perl ${projectDir}/bin/ldsc-quantile-M.pl \\
-        --ref-annot-chr baselineLD.,${cell_type}. \\
+        --ref-annot-chr ${baseline_name}.,${cell_type}. \\
         --frqfile-chr ${frq_prefix}. \\
         --annot-header "ANNOT" \\
         --nb-quantile 5 \\
@@ -68,7 +92,7 @@ process COMPUTE_QUANTILE_M {
 
     if [ \$? -ne 0 ]; then
         echo "ERROR: Perl script failed"
-        
+        exit 1
     fi
 
     echo ""
@@ -112,7 +136,7 @@ process COMPUTE_QUANTILE_H2G {
     # Check if R script exists
     if [ ! -f "${projectDir}/bin/ldsc-quantile_h2g.R" ]; then
         echo "ERROR: R script not found at ${projectDir}/bin/ldsc-quantile_h2g.R"
-        
+        exit 1
     fi
 
     echo "Running R script for quantile h2g analysis..."
@@ -125,7 +149,7 @@ process COMPUTE_QUANTILE_H2G {
 
     if [ \$? -ne 0 ]; then
         echo "ERROR: R script failed"
-        
+        exit 1
     fi
 
     echo ""
@@ -169,7 +193,7 @@ process COMPARE_ANNOTATIONS {
     # Check if R script exists
     if [ ! -f "${projectDir}/bin/ldsc-compare_annotations.R" ]; then
         echo "ERROR: R script not found at ${projectDir}/bin/ldsc-compare_annotations.R"
-        
+        exit 1
     fi
 
     # Run comparison script

@@ -1,27 +1,26 @@
 // modules/munge_gwas_for_ldsc.nf
+// Step 1: Munge GWAS summary statistics for LDSC
 
-process MUNGE_GWAS_FOR_LDSC {
+process CONVERT_GWAS_FOR_LDSC {
     tag "${gwas_raw.simpleName}"
     label 'medium_mem'
-    publishDir "${params.outdir}/ldsc/munged", mode: 'copy'
     
-    container "${projectDir}/environments/ldsc_v1.0.1.sif"
+    container "${projectDir}/environments/py-r-cepo-scdrs.sif"
 
     input:
     path gwas_raw
     val genome_build
-    path ref_bim        // BIM file for adding rsIDs
+    path ref_bim
 
     output:
-    path "*.sumstats.gz", emit: gwas_munged
-    path "*.log", emit: log
+    path "*_for_ldsc.txt"
 
     script:
-    def gwas_prefix = gwas_raw.simpleName.replaceAll(~/\.(txt|tsv)$/, '')
+    def gwas_prefix = gwas_raw.simpleName.replaceAll(~/\\.txt$/, '').replaceAll(~/\\.gz$/, '')
     
     """
     echo "========================================" | tee -a munge.log
-    echo "STEP 1: Munge GWAS for LDSC" | tee -a munge.log
+    echo "STEP 1a: Format GWAS for LDSC" | tee -a munge.log
     echo "========================================" | tee -a munge.log
     echo "Genome build: ${genome_build}" | tee -a munge.log
     echo "Reference BIM: ${ref_bim}" | tee -a munge.log
@@ -34,28 +33,10 @@ process MUNGE_GWAS_FOR_LDSC {
         "${ref_bim}" \\
         "${gwas_prefix}"
     
-    # Step 1b: Munge summary statistics
+    # Step 1b: Convert Z-scores to P-values if needed
     echo "" | tee -a munge.log
-    echo "Munging summary statistics with LDSC..." | tee -a munge.log
+    echo "Checking for Z-scores and converting to P-values if needed..." | tee -a munge.log
     
-    munge_sumstats.py \\
-        --sumstats "${gwas_prefix}_with_rsids.txt" \\
-        --N-col N \\
-        --out "${gwas_prefix}_munged" \\
-        2>&1 | tee -a munge.log
-    
-    echo "" | tee -a munge.log
-    echo "✓ Munging complete" | tee -a munge.log
-    
-    # Verify output
-    if [ -f "${gwas_prefix}_munged.sumstats.gz" ]; then
-        echo "✓ Output file created: ${gwas_prefix}_munged.sumstats.gz" | tee -a munge.log
-        zcat "${gwas_prefix}_munged.sumstats.gz" | head -n 5 | tee -a munge.log
-    else
-        echo "❌ ERROR: Munged file not created" | tee -a munge.log
-        
-    fi
-    
-    mv munge.log ${gwas_prefix}_munge.log
+    Rscript ${projectDir}/bin/munge_gwas_for_ldsc.R "${gwas_prefix}_with_rsids.txt" "${gwas_prefix}_for_ldsc.txt"
     """
 }

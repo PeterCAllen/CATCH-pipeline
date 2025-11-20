@@ -6,7 +6,8 @@
 //
 
 // Import the modules required for this subworkflow
-include { MUNGE_GWAS_FOR_LDSC         } from '../modules/munge_gwas_for_ldsc'
+include { CONVERT_GWAS_FOR_LDSC       } from '../modules/munge_gwas_for_ldsc'
+include { RUN_MUNGE_SUMSTATS          } from '../modules/run_munge_sumstats'
 include { CREATE_CONTINUOUS_BEDS      } from '../modules/create_continuous_beds'
 include { CREATE_LDSC_ANNOT           } from '../modules/create_ldsc_annot'
 include { COMPUTE_LDSC_SCORES         } from '../modules/compute_ldsc_scores'
@@ -23,24 +24,24 @@ workflow LDSC {
         genome_build        // hg19 or hg38
 
     main:
-        // Create a channel that selects the appropriate BIM file based on genome build
-        ch_ref_bim = genome_build
-            .map { build ->
-                def ref_bim_path = (build in ['hg38', 'GRCh38']) 
-                    ? params.ref_hg38_bim_file
-                    : params.ref_hg19_bim_file
-                file(ref_bim_path, checkIfExists: true)
-            }
+        // Always use hg19 reference (gene coordinates are converted to hg19 in prepare_gene_coords)
+        ch_ref_bim = Channel.value(file(params.ref_hg19_bim_file, checkIfExists: true))
+        ch_hapmap3_snps = Channel.value(file(params.ref_hg19_hapmap3, checkIfExists: true))
         
         // ================================================================================
         // STEP 1: Munge GWAS Summary Statistics for LDSC
         // ================================================================================
         // Format: Adds rsIDs, prepares for munge_sumstats.py
+        // Uses w_hm3.snplist for --merge-alleles (collaborators' approach)
         
-        MUNGE_GWAS_FOR_LDSC(
+        CONVERT_GWAS_FOR_LDSC(
             gwas_sumstats,
             genome_build,
             ch_ref_bim
+        )
+
+        RUN_MUNGE_SUMSTATS(
+            CONVERT_GWAS_FOR_LDSC.out
         )
 
         // ================================================================================
@@ -67,20 +68,21 @@ workflow LDSC {
                 tuple(cell_type, bed_file)
             }
         
-        // Determine reference paths based on genome build
-        ch_ref_params = genome_build.map { build ->
-            def is_hg38 = (build in ['hg38', 'GRCh38'])
-            // derive baseline/weights directories from the known ref_base_dir layout
-            def baseline_dir = is_hg38 ? "${params.ref_base_dir}/hg38/baseline" : "${params.ref_base_dir}/hg19/baseline"
-            def weights_dir  = is_hg38 ? "${params.ref_base_dir}/hg38/weights"  : "${params.ref_base_dir}/hg19/weights"
-            [
-                plink_dir: is_hg38 ? params.ref_hg38_plink_dir : params.ref_hg19_plink_dir,
-                plink_prefix: is_hg38 ? "1000G.EUR.hg38" : "1000G.EUR.hg19",
-                hapmap3: is_hg38 ? params.ref_hg38_hapmap3 : params.ref_hg19_hapmap3,
-                baseline_dir: baseline_dir,
-                weights_dir: weights_dir
-            ]
-        }
+        // Always use hg19 reference paths (coordinates are automatically converted)
+        // Extract just the prefix filename from the full path
+        def plink_prefix_name = new File(params.ref_hg19_plink_prefix).name
+        // Extract directory from the baseline path (everything before the last component)
+        def baseline_dir = params.ref_hg19_baseline.substring(0, params.ref_hg19_baseline.lastIndexOf('/'))
+        def weights_dir = params.ref_hg19_weights.substring(0, params.ref_hg19_weights.lastIndexOf('/'))
+        
+        ch_ref_params = Channel.value([
+            plink_dir: params.ref_hg19_plink_dir,
+            plink_prefix: plink_prefix_name,
+            hapmap3: params.ref_hg19_hapmap3,
+            baseline_dir: baseline_dir,
+            weights_dir: weights_dir,
+            frq_dir: params.ref_hg19_frq_dir  // ← FIXED: Added this line
+        ])
         
         // STEP 3a: Create annotation files (R script in py-r-cepo-scdrs container)
         // Create channels for each chromosome's BIM file only
@@ -204,13 +206,14 @@ workflow LDSC {
                 weights_dir: file(params_map.weights_dir, checkIfExists: true),
                 plink_dir: file(params_map.plink_dir, checkIfExists: true),
                 plink_prefix: params_map.plink_prefix,
-                hapmap3: file(params_map.hapmap3, checkIfExists: true)
+                hapmap3: file(params_map.hapmap3, checkIfExists: true),
+                frq_dir: file(params_map.frq_dir, checkIfExists: true)  // ← Now this works!
             ]
         }
 
         // Combine all inputs for RUN_SLDSC
         ldsc_input_ch = ch_all_annot_files
-            .combine(MUNGE_GWAS_FOR_LDSC.out.gwas_munged)
+            .combine(RUN_MUNGE_SUMSTATS.out.gwas_munged)
             .combine(genome_build)
             .combine(ch_ref_files)
             .map { cell_type, annot_files, gwas_munged, build, ref_files ->
@@ -220,7 +223,7 @@ workflow LDSC {
                     build,
                     ref_files.baseline_dir,
                     ref_files.weights_dir,
-                    ref_files.plink_dir,
+                    ref_files.frq_dir,          // FIXED: Changed from plink_dir to frq_dir
                     ref_files.plink_prefix,
                     ref_files.hapmap3,
                     annot_files
@@ -243,7 +246,7 @@ workflow LDSC {
                     annot_files,
                     build,
                     ref_files.baseline_dir,
-                    ref_files.plink_dir,
+                    ref_files.frq_dir,
                     ref_files.plink_prefix
                 )
             }
@@ -281,7 +284,7 @@ workflow LDSC {
         )
 
     emit:
-        munged_gwas = MUNGE_GWAS_FOR_LDSC.out.gwas_munged
+        munged_gwas = RUN_MUNGE_SUMSTATS.out.gwas_munged
         bed_dir     = CREATE_CONTINUOUS_BEDS.out.bed_dir
         results     = RUN_SLDSC.out.results
         quantile_results = COMPUTE_QUANTILE_H2G.out.quantile_results

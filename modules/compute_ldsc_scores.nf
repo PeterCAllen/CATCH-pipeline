@@ -21,9 +21,8 @@ process COMPUTE_LDSC_SCORES {
 
     script:
     def prefix = "${cell_type}.${chr}"
-    def plink_prefix = (genome_build in ['hg38', 'GRCh38']) 
-        ? "1000G.EUR.hg38"
-        : "1000G.EUR.hg19"
+    // Extract PLINK prefix from params
+    def plink_prefix = new File(params.ref_hg19_plink_prefix).name
     def bfile = "${plink_prefix}.${chr}"
     
     // LDSC parameters
