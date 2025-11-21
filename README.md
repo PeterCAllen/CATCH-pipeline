@@ -1,6 +1,6 @@
 # CATCHY Pipeline
 
-A Nextflow pipeline for integrating single-cell RNA-seq data with GWAS summary statistics using three complementary methods: LDSC (Linkage Disequilibrium Score Regression), MAGMA (Multi-marker Analysis of GenoMic Annotation), and scDRS (single-cell Disease Relevance Score).
+A Nextflow pipeline for integrating single-cell RNA-seq data with GWAS summary statistics using three complementary methods: LDSC (Linkage Disequilibrium Score Regression), MAGMA, and scDRS (single-cell Disease Relevance Score).
 
 ## Overview
 
