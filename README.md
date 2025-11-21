@@ -1,7 +1,5 @@
 # CATCHY Pipeline
 
-**C**ell-type **A**ssociation **T**esting with **C**EP**O** and **H**eritabilit**Y**
-
 A Nextflow pipeline for integrating single-cell RNA-seq data with GWAS summary statistics using three complementary methods: LDSC (Linkage Disequilibrium Score Regression), MAGMA (Multi-marker Analysis of GenoMic Annotation), and scDRS (single-cell Disease Relevance Score).
 
 ## Overview
@@ -365,10 +363,10 @@ nextflow run main.nf --help
 
 If you use this pipeline, please cite:
 
-- **LDSC**: Finucane et al., Nature Genetics (2015)
+- **LDSC**: Bulik-Sullivan et al., Nature Genetics (2015)
 - **MAGMA**: de Leeuw et al., PLOS Computational Biology (2015)
 - **scDRS**: Zhang et al., Nature Genetics (2022)
-- **CEPO**: Wang et al., Nature Computational Science (2021)
+- **CEPO**: Kim et al., Nature Computational Science (2021)
 
 ## License
 
@@ -377,7 +375,6 @@ This pipeline is distributed under the MIT License.
 ## Authors
 
 - Ang Li
-- Zhen (Jennifer) Gao
 - Jian Zeng
 - Peter C Allen
 
