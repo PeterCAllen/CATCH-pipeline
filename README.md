@@ -1,4 +1,4 @@
-# CATCHY Pipeline
+# CATCH Pipeline
 
 A Nextflow pipeline for integrating single-cell RNA-seq data with GWAS summary statistics using three complementary methods: LDSC (Linkage Disequilibrium Score Regression), MAGMA, and scDRS (single-cell Disease Relevance Score).
 
@@ -85,8 +85,8 @@ This pipeline performs cell-type-specific enrichment analysis by:
 
 1. **Clone the repository**:
 ```bash
-git clone https://github.com/PeterCAllen/CATCHY-pipeline.git
-cd CATCHY-pipeline
+git clone https://github.com/PeterCAllen/CATCH-pipeline.git
+cd CATCH-pipeline
 ```
 
 2. **Install Nextflow** (if not already installed):
@@ -381,4 +381,4 @@ This pipeline is distributed under the MIT License.
 ## Contact
 
 For questions or issues, please open an issue on the GitHub repository:
-https://github.com/PeterCAllen/CATCHY-pipeline/issues
+https://github.com/PeterCAllen/CATCH-pipeline/issues

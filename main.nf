@@ -43,7 +43,7 @@ workflow {
     // --- 0. Log parameters and start pipeline ---
     log.info """
     =====================================================
-     CATCHY Pipeline
+     CATCH Pipeline
     =====================================================
      Input Parameters:
      ----------------
