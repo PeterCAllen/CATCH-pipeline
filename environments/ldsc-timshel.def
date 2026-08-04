@@ -1,0 +1,38 @@
+Bootstrap: docker
+From: condaforge/mambaforge:23.3.1-1
+
+%labels
+    Description pascaltimshel/ldsc fork used by CELLECT-LDSC (provides --h2-cts with per-cell-type error handling)
+
+%post
+    set -eu
+
+    apt-get update && apt-get install -y --no-install-recommends git && \
+        rm -rf /var/lib/apt/lists/*
+
+    mamba create -y -n ldsc -c conda-forge -c bioconda \
+        python=2.7 \
+        bitarray=0.8 \
+        numpy=1.16 \
+        pandas=0.20 \
+        scipy=0.18 \
+        pybedtools
+
+    mamba clean -afy
+
+    git clone https://github.com/pascaltimshel/ldsc.git /opt/ldsc
+    cd /opt/ldsc
+    git checkout d869cfd1e9fe1abc03b65c00b8a672bd530d0617
+
+    chmod +x /opt/ldsc/ldsc.py /opt/ldsc/munge_sumstats.py
+
+    /opt/conda/envs/ldsc/bin/python /opt/ldsc/ldsc.py --help > /dev/null
+    /opt/conda/envs/ldsc/bin/python /opt/ldsc/munge_sumstats.py --help > /dev/null
+
+%environment
+    export PATH=/opt/conda/envs/ldsc/bin:/opt/ldsc:$PATH
+    export LC_ALL=C.UTF-8
+    export OMP_NUM_THREADS=1
+
+%runscript
+    exec "$@"

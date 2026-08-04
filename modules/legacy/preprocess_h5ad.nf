@@ -19,6 +19,6 @@ process PREPROCESS_H5AD {
     python3 -u ${projectDir}/bin/subset_h5ad.py \\
         --input_h5ad ${h5ad_raw} \\
         --output_h5ad filtered.h5ad \\
-        --cell_type_col ${params.cell_type_column}
+        --cell_type_col ${params.cell_type_col}
     """
 }

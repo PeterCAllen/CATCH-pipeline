@@ -1,7 +1,7 @@
 // subworkflows/magma.nf
 
-include { CREATE_MAGMA_GENESET } from '../modules/create_magma_geneset'
-include { RUN_MAGMA } from '../modules/run_magma'
+include { CREATE_MAGMA_GENESET } from '../../modules/legacy/create_magma_geneset'
+include { RUN_MAGMA } from '../../modules/legacy/run_magma'
 
 workflow MAGMA {
     take:

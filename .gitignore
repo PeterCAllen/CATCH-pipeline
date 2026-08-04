@@ -1,0 +1,10 @@
+work/
+results/
+.nextflow/
+.nextflow.log*
+__pycache__/
+*.pyc
+environments/*.sif
+data/
+paper.md
+pipeline_update.md

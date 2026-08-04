@@ -1,0 +1,32 @@
+Bootstrap: docker
+From: condaforge/mambaforge:23.3.1-1
+
+%labels
+    Description CELLECT-LDSC python3 toolchain (pybedtools, bedtools, bedops) for the conLDSC port
+
+%post
+    set -eu
+
+    mamba install -y -c conda-forge -c bioconda \
+        python=3.6.9 \
+        pandas=0.24.2 \
+        numpy=1.16.3 \
+        scipy \
+        pybedtools=0.8.0 \
+        bedtools=2.27.1 \
+        bedops=2.4.37
+
+    mamba clean -afy
+
+    python -c "import pandas, numpy, pybedtools; print('pandas', pandas.__version__); print('numpy', numpy.__version__)"
+    bedops --version
+    bedmap --version
+    bedtools --version
+
+%environment
+    export LC_ALL=C.UTF-8
+    export OMP_NUM_THREADS=1
+    export NUMBA_CACHE_DIR=/tmp
+
+%runscript
+    exec "$@"

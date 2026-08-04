@@ -6,15 +6,15 @@
 //
 
 // Import the modules required for this subworkflow
-include { CONVERT_GWAS_FOR_LDSC       } from '../modules/munge_gwas_for_ldsc'
-include { RUN_MUNGE_SUMSTATS          } from '../modules/run_munge_sumstats'
-include { CREATE_CONTINUOUS_BEDS      } from '../modules/create_continuous_beds'
-include { CREATE_LDSC_ANNOT           } from '../modules/create_ldsc_annot'
-include { COMPUTE_LDSC_SCORES         } from '../modules/compute_ldsc_scores'
-include { RUN_SLDSC                   } from '../modules/run_sldsc'
-include { COMPUTE_QUANTILE_M          } from '../modules/quantile_analysis'
-include { COMPUTE_QUANTILE_H2G        } from '../modules/quantile_analysis'
-include { COMPARE_ANNOTATIONS        } from '../modules/quantile_analysis'
+include { CONVERT_GWAS_FOR_LDSC       } from '../../modules/munge_gwas_for_ldsc'
+include { MUNGE_SUMSTATS as RUN_MUNGE_SUMSTATS } from '../../modules/munge_sumstats'
+include { CREATE_CONTINUOUS_BEDS      } from '../../modules/legacy/create_continuous_beds'
+include { CREATE_LDSC_ANNOT           } from '../../modules/legacy/create_ldsc_annot'
+include { COMPUTE_LDSC_SCORES         } from '../../modules/legacy/compute_ldsc_scores'
+include { RUN_SLDSC                   } from '../../modules/legacy/run_sldsc'
+include { COMPUTE_QUANTILE_M          } from '../../modules/legacy/quantile_analysis'
+include { COMPUTE_QUANTILE_H2G        } from '../../modules/legacy/quantile_analysis'
+include { COMPARE_ANNOTATIONS        } from '../../modules/legacy/quantile_analysis'
 
 workflow LDSC {
     take:
@@ -41,7 +41,8 @@ workflow LDSC {
         )
 
         RUN_MUNGE_SUMSTATS(
-            CONVERT_GWAS_FOR_LDSC.out
+            CONVERT_GWAS_FOR_LDSC.out.formatted_gwas,
+            Channel.value(file(params.ref_hg19_w_hm3_snplist, checkIfExists: true))
         )
 
         // ================================================================================

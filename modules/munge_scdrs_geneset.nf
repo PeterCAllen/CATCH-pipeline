@@ -38,7 +38,14 @@ process MUNGE_SCDRS_GENESET {
     echo "" | tee -a munge_gs.log
     echo "Gene set preview:" | tee -a munge_gs.log
     head -n 10 "${gwas_prefix}.gs" | tee -a munge_gs.log
-    
+
+    TRAIT=\$(tail -n +2 "${gwas_prefix}.gs" | cut -f1 | head -n 1)
+    if [ "\$TRAIT" != "${params.gwas_name}" ]; then
+        echo "ERROR: .gs trait is '\$TRAIT', expected '${params.gwas_name}'." | tee -a munge_gs.log
+        echo "The z-score column in the input TSV must be named after the trait." | tee -a munge_gs.log
+        exit 1
+    fi
+
     mv munge_gs.log ${gwas_prefix}_munge_gs.log
     """
 }

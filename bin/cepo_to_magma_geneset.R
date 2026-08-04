@@ -25,7 +25,8 @@ cat(sprintf("Loaded %d genes from MAGMA gene location file\n", nrow(magma_genes)
 
 # --- Read Cepo stats ---
 cat("Reading Cepo stats...\n")
-cepo_metrics <- read.table(args$cepo_stats, sep = "\t", header = TRUE, 
+cepo_sep <- if (grepl("\\.csv$", args$cepo_stats)) "," else "\t"
+cepo_metrics <- read.table(args$cepo_stats, sep = cepo_sep, header = TRUE,
                            stringsAsFactors = FALSE, quote = "")
 
 cat("Columns in Cepo stats:\n")

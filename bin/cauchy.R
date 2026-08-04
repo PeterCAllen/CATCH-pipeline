@@ -1,47 +1,34 @@
 #!/usr/bin/env Rscript
-# Combine P‑values from LDSC, MAGMA‑GSEA, scDRS via ACAT (Aggregated Cauchy Association Test)
-# Updated to be generalizable for pipeline integration
 
 suppressPackageStartupMessages({
   library(data.table)
-  library(dplyr)
   library(ggplot2)
 })
 
-# Parse command line arguments
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) < 5) {
-  cat("Usage: cauchy.R <ldsc_results> <magma_results> <scdrs_results> <h5ad_name> <gwas_prefix>\n")
-  cat("  ldsc_results   : Path to LDSC annotation comparison CSV file\n")
-  cat("  magma_results  : Path to MAGMA .gsa.out file\n")
-  cat("  scdrs_results  : Path to scDRS .scdrs_group file\n")
-  cat("  h5ad_name      : Name/identifier of the single-cell dataset\n")
-  cat("  gwas_prefix    : GWAS trait identifier/prefix\n")
+
+specs        <- character(0)
+dataset_name <- NA_character_
+gwas_prefix  <- NA_character_
+out_prefix   <- NA_character_
+
+i <- 1
+while (i <= length(args)) {
+  a <- args[i]
+  if (a == "--method")       { specs <- c(specs, args[i + 1]); i <- i + 2 }
+  else if (a == "--dataset") { dataset_name <- args[i + 1];    i <- i + 2 }
+  else if (a == "--trait")   { gwas_prefix  <- args[i + 1];    i <- i + 2 }
+  else if (a == "--out")     { out_prefix   <- args[i + 1];    i <- i + 2 }
+  else stop("Unknown argument: ", a)
+}
+
+if (length(specs) == 0 || is.na(dataset_name) || is.na(gwas_prefix) || is.na(out_prefix)) {
+  cat("Usage: cauchy.R --method NAME=FILE=KEYCOL=PCOL [--method ...] --dataset D --trait T --out PREFIX\n")
   quit(status = 1)
 }
 
-ldsc_file <- args[1]
-magma_file <- args[2]
-scdrs_file <- args[3]
-dataset_name <- args[4]
-gwas_prefix <- args[5]
-
-cat("========================================\n")
-cat("Cauchy Combination of P-values\n")
-cat("========================================\n")
-cat("LDSC results  :", ldsc_file, "\n")
-cat("MAGMA results :", magma_file, "\n")
-cat("scDRS results :", scdrs_file, "\n")
-cat("Dataset       :", dataset_name, "\n")
-cat("GWAS trait    :", gwas_prefix, "\n")
-cat("\n")
-
-# ---- cauchy Function ----
-# Aggregated Cauchy Association Test for combining p-values
 cauchy <- function(p) {
-  if (all(is.na(p))) {
-    return(NA)
-  }
+  if (all(is.na(p))) return(NA)
   p <- p[!is.na(p)]
   p[p == 1] <- 1 - 1e-16
   is.small <- (p < 1e-16)
@@ -52,159 +39,129 @@ cauchy <- function(p) {
     cct.stat <- cct.stat + sum(tan((0.5 - p[!is.small]) * pi))
     cct.stat <- cct.stat / length(p)
   }
-  if (cct.stat > 1e+15) {
-    pval <- (1 / cct.stat) / pi
-  } else {
-    pval <- 1 - pcauchy(cct.stat)
+  if (cct.stat > 1e+15) (1 / cct.stat) / pi else 1 - pcauchy(cct.stat)
+}
+
+normalize_label <- function(x) {
+  x <- gsub("[^A-Za-z0-9_-]", "_", as.character(x))
+  x <- gsub("_+", "_", x)
+  trimws(gsub("^[_-]+|[_-]+$", "", x))
+}
+
+parse_spec <- function(spec) {
+  parts <- strsplit(spec, "=", fixed = TRUE)[[1]]
+  if (length(parts) != 4) {
+    stop("--method must be NAME=FILE=KEYCOL=PCOL, got: ", spec)
   }
-  pval
+  list(name = parts[1], file = parts[2], key = parts[3], pcol = parts[4])
 }
 
-# ---- Read input files ----
-cat("Reading input files...\n")
+methods <- lapply(specs, parse_spec)
+method_names <- vapply(methods, function(m) m$name, character(1))
 
-# LDSC results (annotation comparison CSV)
-if (!file.exists(ldsc_file)) {
-  stop("ERROR: LDSC results file not found: ", ldsc_file)
-}
-results_ldsc <- fread(ldsc_file)
-cat("✓ Read LDSC results:", nrow(results_ldsc), "rows\n")
+cat("Combining", length(methods), "methods:", paste(method_names, collapse = ", "), "\n\n")
 
-# MAGMA results (.gsa.out)
-if (!file.exists(magma_file)) {
-  stop("ERROR: MAGMA results file not found: ", magma_file)
-}
-results_magma <- fread(magma_file, skip = 3)
-cat("✓ Read MAGMA results:", nrow(results_magma), "rows\n")
+read_method <- function(m) {
+  if (!file.exists(m$file)) stop("File not found for method '", m$name, "': ", m$file)
 
-# scDRS results (.scdrs_group)
-if (!file.exists(scdrs_file)) {
-  stop("ERROR: scDRS results file not found: ", scdrs_file)
-}
-results_scdrs <- fread(scdrs_file)
-cat("✓ Read scDRS results:", nrow(results_scdrs), "rows\n")
-cat("\n")
+  dt <- if (grepl("\\.csv$", m$file)) fread(m$file) else fread(m$file)
 
-# ---- Standardize column names ----
-cat("Standardizing column names...\n")
+  if (!m$key %in% names(dt)) {
+    stop("Method '", m$name, "': key column '", m$key, "' not in ", m$file,
+         ". Columns: ", paste(names(dt), collapse = ", "))
+  }
+  if (!m$pcol %in% names(dt)) {
+    stop("Method '", m$name, "': p-value column '", m$pcol, "' not in ", m$file,
+         ". Columns: ", paste(names(dt), collapse = ", "))
+  }
 
-# LDSC: rename "annotation" to "group"
-if ("annotation" %in% names(results_ldsc)) {
-  setnames(results_ldsc, "annotation", "group")
-}
-
-# MAGMA: rename "VARIABLE" to "group"
-if ("VARIABLE" %in% names(results_magma)) {
-  setnames(results_magma, "VARIABLE", "group")
-}
-
-# scDRS: should already have "group" column
-if (!"group" %in% names(results_scdrs)) {
-  stop("ERROR: scDRS results missing 'group' column")
-}
-
-# ---- Extract relevant p-value columns ----
-cat("Extracting p-values...\n")
-
-# LDSC: use "top_pval" (the best quintile p-value)
-if (!"top_pval" %in% names(results_ldsc)) {
-  stop("ERROR: LDSC results missing 'top_pval' column")
-}
-ldsc_cols <- results_ldsc[, .(group, ldsc_pval = top_pval)]
-
-# MAGMA: use "P" (gene-set association p-value)
-if (!"P" %in% names(results_magma)) {
-  stop("ERROR: MAGMA results missing 'P' column")
-}
-magma_cols <- results_magma[, .(group, magma_pval = P)]
-
-# scDRS: use "assoc_mcp" (MC-corrected cell type association p-value)
-if (!"assoc_mcp" %in% names(results_scdrs)) {
-  stop("ERROR: scDRS results missing 'assoc_mcp' column")
-}
-scdrs_cols <- results_scdrs[, .(group, scdrs_pval = assoc_mcp)]
-
-cat("✓ LDSC p-values extracted for", nrow(ldsc_cols), "cell types\n")
-cat("✓ MAGMA p-values extracted for", nrow(magma_cols), "cell types\n")
-cat("✓ scDRS p-values extracted for", nrow(scdrs_cols), "cell types\n")
-cat("\n")
-
-# ---- Merge all three data.tables on cell type/group ----
-cat("Merging results by cell type...\n")
-
-# Use inner join (all = FALSE) to keep only cell types present in all three analyses
-merged_data <- merge(ldsc_cols, magma_cols, by = "group", all = FALSE)
-merged_data <- merge(merged_data, scdrs_cols, by = "group", all = FALSE)
-
-cat("✓ Merged data:", nrow(merged_data), "cell types present in all three analyses\n")
-
-if (nrow(merged_data) == 0) {
-  stop("ERROR: No common cell types found across all three analyses")
-}
-cat("\n")
-
-# ---- Calculate cauchy combined p-value ----
-cat("Computing Cauchy combined p-values...\n")
-
-merged_data[, CAUCHY_P := {
-  pvals <- c(ldsc_pval, magma_pval, scdrs_pval)
-  cauchy(pvals)
-}, by = 1:nrow(merged_data)]
-
-cat("✓ Computed cauchy p-values\n")
-cat("\n")
-
-# ---- Add metadata columns ----
-merged_data[, `:=`(dataset = dataset_name, trait = gwas_prefix)]
-
-# Reorder columns for clarity
-setcolorder(merged_data, c("group", "dataset", "trait", "ldsc_pval", "magma_pval", "scdrs_pval", "CAUCHY_P"))
-
-
-# ---- Plot cauchy p-values ----
-merged_data <- merged_data %>%
-    mutate(assoc_fdr_0.05 = p.adjust(CAUCHY_P, method = "fdr"),
-           assoc_fdr_0.05_fig = cut(
-            assoc_fdr_0.05,
-            breaks = c(-Inf, 0.001, 0.05, 0.1, 1),
-            labels = c("***", "**", "*", "")
-    )
-)
-
-p1 <- ggplot(merged_data, aes(x = group, y = -log10(assoc_fdr_0.05), fill = group)) +
-  geom_col(color = "black") +
-  geom_text(aes(label = assoc_fdr_0.05_fig),
-            vjust = -0.3, size = 4, na.rm = TRUE) +
-  theme_classic(base_size = 14) +
-  theme(
-    axis.text.x = element_text(face = "bold", angle = 90, hjust = 1),
-    panel.border = element_rect(fill = NA, color = "black", size = 1),
-    legend.position = "none"
-  ) +
-  labs(
-    y = expression(-log[10]~"FDR-adjusted ACAT-O P"),
-    title = "Significant associations across cell types"
+  out <- data.table(
+    group = normalize_label(dt[[m$key]]),
+    pval  = as.numeric(dt[[m$pcol]])
   )
+  out <- out[!is.na(group) & nzchar(group)]
 
-ggsave(
-  filename = paste0(gwas_prefix, "_cauchy_cauchy_fdr_plot.png"),
-  plot = p1,
-  dpi = 300
-)
+  n_dup <- sum(duplicated(out$group))
+  if (n_dup > 0) {
+    stop("Method '", m$name, "': ", n_dup, " duplicate cell types after label normalization.")
+  }
 
-# ---- Write output ----
-output_file <- paste0(gwas_prefix, "_cauchy_combined.tsv")
-fwrite(merged_data, file = output_file, sep = "\t")
+  setnames(out, "pval", paste0(m$name, "_pval"))
+  cat(sprintf("  %-24s %4d cell types from %s\n", m$name, nrow(out), basename(m$file)))
+  out
+}
 
-cat("========================================\n")
-cat("Results Summary\n")
-cat("========================================\n")
-cat("Cell types analyzed:", nrow(merged_data), "\n")
-cat("Significant (CAUCHY_P < 0.05):", sum(merged_data$CAUCHY_P < 0.05, na.rm = TRUE), "\n")
+tables <- lapply(methods, read_method)
 cat("\n")
-cat("Top 10 cell types by cauchy p-value:\n")
-top_results <- merged_data[order(CAUCHY_P)][1:min(10, nrow(merged_data))]
-print(top_results[, .(group, ldsc_pval, magma_pval, scdrs_pval, CAUCHY_P)])
-cat("\n")
-cat("✓ Saved combined results to:", output_file, "\n")
-cat("========================================\n")
+
+group_sets <- lapply(tables, function(t) t$group)
+all_groups <- sort(Reduce(union, group_sets))
+common     <- sort(Reduce(intersect, group_sets))
+
+if (length(common) == 0) {
+  cat("Cell types seen per method:\n")
+  for (k in seq_along(methods)) {
+    cat("  ", method_names[k], ": ", paste(utils::head(sort(group_sets[[k]]), 5), collapse = ", "), "\n", sep = "")
+  }
+  stop("No cell types are shared across all methods.")
+}
+
+if (length(common) < length(all_groups)) {
+  cat("ERROR: cell type sets differ across methods.\n")
+  for (k in seq_along(methods)) {
+    missing <- setdiff(all_groups, group_sets[[k]])
+    if (length(missing) > 0) {
+      cat(sprintf("  %s is missing %d: %s\n", method_names[k], length(missing),
+                  paste(missing, collapse = ", ")))
+    }
+  }
+  stop("Refusing to silently drop cell types. Reconcile the labels upstream ",
+       "(NORMALIZE_H5AD writes the canonical mapping) or investigate why a method dropped them.")
+}
+
+merged <- Reduce(function(x, y) merge(x, y, by = "group", all = FALSE), tables)
+cat("Merged:", nrow(merged), "cell types across all", length(methods), "methods\n\n")
+
+pval_cols <- paste0(method_names, "_pval")
+
+for (col in pval_cols) {
+  bad <- merged[[col]]
+  if (any(is.na(bad))) cat("WARNING:", sum(is.na(bad)), "NA p-values in", col, "\n")
+  if (any(!is.na(bad) & (bad < 0 | bad > 1))) stop("Out-of-range p-values in ", col)
+}
+
+merged[, CATCH_P := apply(.SD, 1, cauchy), .SDcols = pval_cols]
+merged[, `:=`(dataset = dataset_name, trait = gwas_prefix)]
+
+setcolorder(merged, c("group", "dataset", "trait", pval_cols, "CATCH_P"))
+setorder(merged, CATCH_P)
+
+merged[, within_run_fdr := p.adjust(CATCH_P, method = "fdr")]
+
+out_tsv <- paste0(out_prefix, "_catch_combined.tsv")
+fwrite(merged, out_tsv, sep = "\t")
+
+plot_dt <- copy(merged)
+plot_dt[, sig := cut(within_run_fdr, breaks = c(-Inf, 0.001, 0.01, 0.05, Inf),
+                     labels = c("***", "**", "*", ""))]
+
+p1 <- ggplot(plot_dt, aes(x = reorder(group, -CATCH_P), y = -log10(CATCH_P))) +
+  geom_col(fill = "#3B6EA5", color = "black", linewidth = 0.2) +
+  geom_text(aes(label = sig), hjust = -0.2, size = 3.5, na.rm = TRUE) +
+  coord_flip() +
+  theme_classic(base_size = 11) +
+  labs(x = NULL,
+       y = expression(-log[10]~"CATCH Cauchy P"),
+       title = paste0("CATCH: ", gwas_prefix, " x ", dataset_name),
+       caption = "Asterisks mark within-run FDR; the manuscript applies FDR across all traits (see catch_fdr.R)")
+
+ggsave(paste0(out_prefix, "_catch_plot.png"), p1, dpi = 300,
+       width = 7, height = max(3, 0.22 * nrow(plot_dt) + 1.5), limitsize = FALSE)
+
+cat("Wrote", out_tsv, "\n")
+cat("Cell types:", nrow(merged), "\n")
+cat("Nominally significant (CATCH_P < 0.05):", sum(merged$CATCH_P < 0.05, na.rm = TRUE), "\n\n")
+cat("Top 10 by CATCH_P:\n")
+print(merged[1:min(10, nrow(merged)), c("group", pval_cols, "CATCH_P"), with = FALSE])
+cat("\nNOTE: within_run_fdr covers this trait only. Li et al. control FDR at 5% across all\n")
+cat("cell types AND traits within a dataset -- run bin/catch_fdr.R over all traits for that.\n")

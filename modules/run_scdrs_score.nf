@@ -40,7 +40,13 @@ process RUN_SCDRS_SCORE {
         --n-ctrl ${params.scdrs_n_ctrl} \\
         --flag-filter-data ${params.scdrs_filter_data} \\
         --flag-raw-count ${params.scdrs_raw_count} \\
+        --flag-return-ctrl-norm-score True \\
         ${cov_opt} \\
         2>&1 | tee -a scdrs_score.log
+
+    if ! ls *.full_score.gz >/dev/null 2>&1; then
+        echo "ERROR: scdrs compute-score produced no .full_score.gz" | tee -a scdrs_score.log
+        exit 1
+    fi
     """
 }

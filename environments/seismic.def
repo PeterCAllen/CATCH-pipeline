@@ -1,0 +1,36 @@
+Bootstrap: docker
+From: bioconductor/bioconductor_docker:RELEASE_3_18
+
+%labels
+    Description seismicGWAS for the CATCH seismic-mBAT-combo component
+
+%post
+    set -eu
+
+    apt-get update && apt-get install -y --no-install-recommends \
+        libhdf5-dev libcurl4-openssl-dev libssl-dev libxml2-dev && \
+        rm -rf /var/lib/apt/lists/*
+
+    Rscript -e 'options(warn = 2); \
+        install.packages(c("remotes", "data.table", "ggplot2", "ggrepel", "magrittr", "Matrix", "speedglm"), \
+                         repos = "https://packagemanager.posit.co/cran/2024-06-03")'
+
+    Rscript -e 'options(warn = 2); \
+        BiocManager::install(c("SingleCellExperiment", "SummarizedExperiment", "AnnotationDbi", \
+                               "org.Hs.eg.db", "zellkonverter", "scater", "basilisk"), ask = FALSE, update = FALSE)'
+
+    # seismicGWAS has no CRAN/Bioconductor release and no git tags, so pin by commit.
+    Rscript -e 'options(warn = 2); \
+        remotes::install_github("ylaboratory/seismic", ref = "1d29b5dea9f51132c246e6587d5eb7f4c2b769c2", \
+                                upgrade = "never")'
+
+    Rscript -e 'library(seismicGWAS); \
+        stopifnot(all(c("calc_specificity", "get_ct_trait_associations", "translate_gene_ids") \
+                      %in% getNamespaceExports("seismicGWAS")))'
+
+%environment
+    export LC_ALL=C.UTF-8
+    export OMP_NUM_THREADS=1
+
+%runscript
+    exec Rscript "$@"

@@ -7,6 +7,9 @@ import pandas as pd
 import argparse
 import time
 
+EXPECTED_PC_GENES = 19430
+
+
 def log_message(message):
     """Prints a formatted log message with a timestamp."""
     timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
@@ -69,9 +72,34 @@ def main(args):
         ordered=True
     )
     df_coords = df_coords[~df_coords['chr'].isin(['M', 'X', 'Y'])]
+    log_message(f"After restricting to autosomes 1-22: {df_coords.shape}")
+
+    if args.protein_coding:
+        if 'gene_type' not in df_coords.columns:
+            raise ValueError(
+                "--protein_coding requested but the gene matrix has no 'gene_type' column. "
+                f"Available columns: {sorted(df_coords.columns)}"
+            )
+        gene_type_norm = (
+            df_coords['gene_type'].astype(str).str.strip().str.lower().str.replace('-', '_', regex=False)
+        )
+        df_coords = df_coords[gene_type_norm == 'protein_coding']
+        log_message(f"After restricting to protein_coding: {df_coords.shape}")
+
+        n_genes = len(df_coords)
+        if not (EXPECTED_PC_GENES * 0.8) <= n_genes <= (EXPECTED_PC_GENES * 1.2):
+            log_message(
+                f"WARNING: {n_genes} protein-coding autosomal genes is >20% away from the "
+                f"expected {EXPECTED_PC_GENES}. Check the gene matrix build and annotation version."
+            )
+        else:
+            log_message(f"Gene universe size {n_genes} consistent with expected ~{EXPECTED_PC_GENES}.")
+    else:
+        log_message("Protein-coding filter DISABLED (--no_protein_coding).")
+
     df_coords.sort_values(by=['chr', 'start', 'end'], inplace=True)
     log_message(f"Gene coordinates (hg19): {df_coords.shape}")
-    
+
     # === Output 1: LDSC/mBAT version (chr, start, end, Gene) - NO HEADER - hg19 ===
     log_message("Creating LDSC/mBAT gene coordinate file (hg19)...")
     df_ldsc_out = df_coords[['chr', 'start', 'end', 'Gene']].copy()
@@ -84,6 +112,13 @@ def main(args):
     df_magma_out.to_csv(args.output_magma, sep='\t', index=False, header=False)
     log_message(f"MAGMA gene coordinate file saved to {args.output_magma} ({len(df_magma_out)} genes, hg19 coordinates)")
     
+    # === Output 2b: CELLECT version (GENE, CHR, START, END, STRAND, GENE_NAME) - NO HEADER - hg19 ===
+    if args.output_cellect:
+        log_message("Creating CELLECT gene coordinate file (hg19)...")
+        df_cellect_out = df_coords[['Gene', 'chr', 'start', 'end', coord_strand_col, 'gene_name']].copy()
+        df_cellect_out.to_csv(args.output_cellect, sep='\t', index=False, header=False)
+        log_message(f"CELLECT gene coordinate file saved to {args.output_cellect} ({len(df_cellect_out)} genes)")
+
     # === Output 3: CEPO/scDRS version (Gene, chr, start, end, gene_type, gene_name) - WITH HEADER - hg19 ===
     # Note: CEPO analysis works with gene expression and doesn't need specific genomic coordinates
     # scDRS uses mBAT which requires hg19 reference matching, so we use hg19 coordinates
@@ -112,8 +147,13 @@ if __name__ == '__main__':
                         help='Path for the output MAGMA gene location file (no header)')
     parser.add_argument('--output_ldsc', type=str, required=True, 
                         help='Path for the output LDSC gene location file (no header)')
-    parser.add_argument('--output_cepo', type=str, required=True, 
+    parser.add_argument('--output_cepo', type=str, required=True,
                         help='Path for the output CEPO gene coordinate file (with header)')
-    
+    parser.add_argument('--output_cellect', type=str, default=None,
+                        help='Path for the output CELLECT gene coordinate file (no header)')
+    parser.add_argument('--no_protein_coding', dest='protein_coding', action='store_false',
+                        help='Disable the protein-coding gene filter')
+    parser.set_defaults(protein_coding=True)
+
     args = parser.parse_args()
     main(args)
