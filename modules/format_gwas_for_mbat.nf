@@ -1,10 +1,10 @@
-// modules/format_gwas_for_scdrs.nf
+// modules/format_gwas_for_mbat.nf
 // Step 0: Format GWAS summary statistics for mBAT
 
-process FORMAT_GWAS_FOR_SCDRS {
+process FORMAT_GWAS_FOR_MBAT {
     tag "${gwas_raw.simpleName}"
     label 'low_mem'
-    publishDir "${params.outdir}/scdrs/gwas", mode: 'copy', pattern: "*_formatted.txt"
+    publishDir "${params.outdir}/mbat/gwas", mode: 'copy', pattern: "*_formatted.txt"
     
     container "${projectDir}/environments/py-r-cepo-scdrs.sif"
 

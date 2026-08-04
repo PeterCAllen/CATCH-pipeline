@@ -4,7 +4,7 @@
 process COMBINE_MBAT {
     tag "${gwas_prefix}"
     label 'medium_mem'
-    publishDir "${params.outdir}/scdrs/mbat", mode: 'copy'
+    publishDir "${params.outdir}/mbat", mode: 'copy'
     
     container "${projectDir}/environments/py-r-cepo-scdrs.sif"
 

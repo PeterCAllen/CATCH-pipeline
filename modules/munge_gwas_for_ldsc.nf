@@ -1,10 +1,10 @@
 // modules/munge_gwas_for_ldsc.nf
-// Step 1: Munge GWAS summary statistics for LDSC
 
 process CONVERT_GWAS_FOR_LDSC {
     tag "${gwas_raw.simpleName}"
     label 'medium_mem'
-    
+    publishDir "${params.outdir}/conldsc/gwas", mode: 'copy'
+
     container "${projectDir}/environments/py-r-cepo-scdrs.sif"
 
     input:
@@ -13,30 +13,22 @@ process CONVERT_GWAS_FOR_LDSC {
     path ref_bim
 
     output:
-    path "*_for_ldsc.txt"
+    path "${gwas_raw.simpleName}_for_ldsc.txt", emit: formatted_gwas
+    path "*.log",                               emit: log
 
     script:
-    def gwas_prefix = gwas_raw.simpleName.replaceAll(~/\\.txt$/, '').replaceAll(~/\\.gz$/, '')
-    
+    def gwas_prefix = gwas_raw.simpleName
     """
-    echo "========================================" | tee -a munge.log
-    echo "STEP 1a: Format GWAS for LDSC" | tee -a munge.log
-    echo "========================================" | tee -a munge.log
-    echo "Genome build: ${genome_build}" | tee -a munge.log
-    echo "Reference BIM: ${ref_bim}" | tee -a munge.log
-    echo "" | tee -a munge.log
-    
-    # Step 1a: Add rsIDs to GWAS file
-    echo "Adding rsIDs from reference panel..." | tee -a munge.log
     bash ${projectDir}/bin/format_gwas_for_ldsc.sh \\
         "${gwas_raw}" \\
         "${ref_bim}" \\
-        "${gwas_prefix}"
-    
-    # Step 1b: Convert Z-scores to P-values if needed
-    echo "" | tee -a munge.log
-    echo "Checking for Z-scores and converting to P-values if needed..." | tee -a munge.log
-    
-    Rscript ${projectDir}/bin/munge_gwas_for_ldsc.R "${gwas_prefix}_with_rsids.txt" "${gwas_prefix}_for_ldsc.txt"
+        "${gwas_prefix}" \\
+        2>&1 | tee ${gwas_prefix}.rsid.log
+
+    Rscript ${projectDir}/bin/munge_gwas_for_ldsc.R \\
+        "${gwas_prefix}_with_rsids.txt" \\
+        "${gwas_prefix}_for_ldsc.txt" \\
+        "${params.gwas_sample_size}" \\
+        2>&1 | tee ${gwas_prefix}.harmonize.log
     """
 }

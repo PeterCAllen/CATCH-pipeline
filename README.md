@@ -1,359 +1,308 @@
 # CATCH Pipeline
 
-A Nextflow pipeline for integrating single-cell RNA-seq data with GWAS summary statistics using three complementary methods: LDSC (Linkage Disequilibrium Score Regression), MAGMA, and scDRS (single-cell Disease Relevance Score).
+Nextflow implementation of **CATCH** — *Cell-type Associations with Traits via CaucHy
+combination of strategies* — from Li et al., *Benchmarking methods integrating GWAS and
+single-cell transcriptomic data for mapping trait-cell type associations*.
 
-## Overview
+CATCH is the Cauchy combination of exactly four component methods, selected in the paper
+from 184,509 candidate combinations because they span all three methodological families:
 
-This pipeline performs cell-type-specific enrichment analysis by:
+| # | Component | Family | Implementation |
+|---|---|---|---|
+| 1 | **conLDSC-Cepo** | SC-to-GWAS | CELLECT-LDSC on a Cepo specificity matrix |
+| 2 | **conLDSC-GES** | SC-to-GWAS | CELLECT-LDSC on the CELLEX GES matrix |
+| 3 | **seismic-mBAT-combo** | GWAS-to-SC | `seismicGWAS` with mBAT-combo z-statistics substituted for MAGMA |
+| 4 | **scDRS** | GWAS-to-SC | scDRS scored on an mBAT-combo-derived gene set |
 
-1. **Gene Coordinate Preparation**: Extracts hg19 gene coordinates from GeneMatrix (used by all analyses regardless of GWAS build)
-2. **CEPO Analysis**: Identifies differentially expressed genes for each cell type using CEPO (Cell identity from Expression Profiles Optimization)
-3. **MAGMA**: Gene set enrichment analysis using GWAS summary statistics
-4. **LDSC**: Stratified LD score regression for heritability enrichment
-5. **scDRS**: Disease relevance scoring at the single-cell level
-6. **Cauchy Combination**: Combines p-values from all three methods
+MAGMA-GSEA and binary LDSC are benchmarked in the paper but are **not** CATCH components.
+They remain in `modules/legacy/`, off by default — see `modules/legacy/README.md`.
 
-### Important: Reference Data Simplification
+## Pipeline structure
 
-**All analyses (MAGMA, LDSC, scDRS) use hg19/GRCh37 reference data only.** If your GWAS is in hg38/GRCh38:
-- **Gene coordinates** are automatically set to hg19 for all analyses (extracted from GeneMatrix)
-- **SNP coordinates** in the GWAS file retain their original genome build (hg19 or hg38)
-- All reference panels (1000G, LD scores) are hg19 only
-- This approach works because:
-  - Gene-SNP mapping uses the gene window around gene coordinates (hg19)
-  - SNP matching with reference panels uses rsIDs, not coordinates
-  - This eliminates the need for duplicate reference datasets in both genome builds
+```
+PREPARE_GENE_COORDS ──┬─> NORMALIZE_H5AD ──┬─> METRICS ──> CONLDSC (x2: cepo, ges) ─┐
+                      │                     │                                        │
+                      │                     ├─────────────────> SEISMIC ─────────────┤
+                      │                     │                      ^                 ├─> COMBINE_CAUCHY
+                      │                     └─────────────────> SCDRS ───────────────┤
+                      │                                            ^                 │
+                      └────────────> MBAT (gcta64 --mBAT-combo) ───┘                 │
+                                                                                     v
+                                                        <gwas>_catch_combined.tsv
+```
+
+`MBAT` runs once and is shared by the seismic and scDRS branches.
+
+| Path | Purpose |
+|---|---|
+| `subworkflows/metrics.nf` | Cepo and CELLEX/GES specificity matrices |
+| `subworkflows/conldsc.nf` | Native Nextflow port of CELLECT-LDSC, run once per specificity matrix |
+| `subworkflows/mbat.nf` | GCTA mBAT-combo, shared |
+| `subworkflows/seismic.nf` | mBAT z-statistics → `seismicGWAS` |
+| `subworkflows/scdrs.nf` | mBAT gene set → scDRS |
+| `modules/legacy/` | MAGMA-GSEA and the superseded LDSC implementation |
+
+## Method details
+
+These follow the manuscript's Methods; deviations are called out explicitly.
+
+**Preprocessing.** `NORMALIZE_H5AD` reverses any prior log normalization, applies
+UMI-based normalization, and emits **log2(TPM + 1)**. Cell types with **fewer than 20
+cells** are dropped. Genes are restricted to **protein-coding autosomal** genes
+(~19,430, matching CELLECT's `gene_coordinates.GRCh37.ensembl_v91.txt`). Cell type
+labels are sanitized **once, here**, to CELLECT's `[A-Za-z0-9_-]` alphabet with no `__`,
+so all four branches share identical labels and the Cauchy join cannot silently drop
+cell types. The original→sanitized mapping is published alongside the h5ad.
+
+**conLDSC.** A rule-for-rule port of CELLECT-LDSC (`perslab/CELLECT`,
+`cellect-ldsc.snakefile`), not a reimplementation:
+
+- ±100 kb around the gene body, clipped to chromosome size
+- `bedops --partition` + `bedmap --echo-map-id-uniq` for disjoint overlap segments
+- a SNP spanned by multiple genes gets the **maximum** ES value
+- thin annotations, one combined file per chromosome, columns sorted alphabetically
+- an **`all_genes_in_dataset` control annotation** alongside the 53-annotation baseline
+- one `ldsc.py --h2-cts` job per GWAS across all cell types, via a `.ldcts` file
+- the reported p-value is `Coefficient_P_value` = `norm.sf(coef/coef_se)`, the
+  **one-sided coefficient z-score P value** the paper specifies (it states this
+  outperforms heritability-enrichment p-values)
+
+Output matches CELLECT's `prioritization.csv` schema — `gwas, specificity_id,
+annotation, beta, beta_se, pvalue` — so it can be diffed column-for-column against a
+reference CELLECT run.
+
+Requires the **`pascaltimshel/ldsc` fork** pinned at
+`d869cfd1e9fe1abc03b65c00b8a672bd530d0617`, not stock LDSC: its `--h2-cts` adds
+per-cell-type error handling. Built by `environments/ldsc-timshel.def`.
+
+**seismic-mBAT-combo.** Per the Methods, *"the disease genes z-statistics could be
+replaced with mBAT-combo based z-statistics"*. `seismicGWAS::calc_specificity()`
+computes its **own** specificity from the SingleCellExperiment — it does not consume
+Cepo or GES, which is what keeps the four components independent. The z-statistic is
+`qnorm(P_mBATcombo, lower.tail = FALSE)`: **one-sided**, matching MAGMA's `ZSTAT`
+convention, because `get_ct_trait_associations` runs a one-sided test. Unlike the scDRS
+branch there is **no top-N truncation** — seismic regresses across all overlapping genes,
+and truncating would destroy the null part of the regression.
+
+`seismicGWAS` has no CRAN/Bioconductor release and no git tags, so
+`environments/seismic.def` pins it by commit.
+
+**scDRS.** mBAT-combo p-values → top 1,000 genes → z-score weights → `scdrs munge-gs`
+→ `compute-score` → `perform-downstream --group-analysis`. The per-cell-type p-value is
+`assoc_mcp`. `--flag-raw-count` defaults to `False` because preprocessing emits
+log2(TPM+1).
+
+**Cauchy combination.** ACAT across the four component p-values **within each cell
+type**. If the four inputs do not cover the same cell types the step **fails loudly**
+with a set difference rather than inner-joining them away.
+
+> **FDR is cross-trait.** The paper controls FDR at 5% "across all tissues/cell types
+> **and traits** within each dataset". One pipeline run covers one trait, so
+> `within_run_fdr` in the output is provisional. Run `bin/catch_fdr.R` over the
+> `*_catch_combined.tsv` of all traits to reproduce the published thresholds.
 
 ## Requirements
 
-### Software Dependencies
+- **Nextflow** >= 21.04.0
+- **Singularity**
+- A high-memory node: Cepo with `computePvalue = 100` and CELLEX both need ~256 GB
 
-- **Nextflow** (>=21.04.0)
-- **Singularity** or **Docker** (for containerized execution)
-- At least 256GB RAM for CEPO analysis (high-memory node recommended)
+### Containers
 
-### Reference Data
+Build these into `environments/` before the first run:
 
-**Important**: This pipeline always uses **hg19/GRCh37 reference data** for MAGMA, LDSC, and scDRS (mBAT). When your GWAS is in hg38/GRCh38, gene coordinates are automatically converted to hg19 using the GeneMatrix file, ensuring compatibility with reference data.
+| Definition | Provides |
+|---|---|
+| `environments/ldsc-timshel.def` | `pascaltimshel/ldsc` @ d869cfd (`ldsc.py`, `munge_sumstats.py`) |
+| `environments/cellect-py3.def` | pandas/pybedtools/bedtools/**bedops 2.4.37** for the CELLECT port |
+| `environments/cellex.def` | CELLEX |
+| `environments/seismic.def` | `seismicGWAS` pinned by commit |
+| `py-r-cepo-scdrs.sif` | R stack (Cepo, zellkonverter, data.table) + scDRS |
+| `gcta_v1.94.1.sif` | GCTA (`--mBAT-combo`) |
 
-#### Required for all analyses:
-- **Gene matrix file** (`geneMatrix.tsv.gz`): Gene coordinates for both hg19 and hg38 (used for automatic coordinate conversion)
+```bash
+cd environments
+for d in ldsc-timshel cellect-py3 cellex seismic; do
+    singularity build --fakeroot $d.sif $d.def
+done
+```
 
-#### For MAGMA and LDSC (hg19 only):
-- **1000 Genomes Phase 3 European Panel (hg19) v1.1**:
-  - PLINK binary files (`.bed`, `.bim`, `.fam`) per chromosome and combined
-  - Example prefix: `/path/to/1000G.EUR.hg19`
+### Reference data (hg19/GRCh37 throughout)
 
-#### For LDSC (hg19 only):
-- **Baseline LD annotations**: `baselineLD.[1-22].annot.gz` and `.M` files
-- **LD score weights**: `weights.hm3_noMHC.[1-22].l2.ldscore.gz`
-- **HapMap3 SNP list**: `hm3_no_MHC.list.txt`
+| Parameter | File |
+|---|---|
+| `ref_hg19_plink_prefix` | 1000G EUR Phase 3 PLINK, per chromosome |
+| `ref_hg19_baseline` | Baseline annotations, **53 annotations**, thin-annot |
+| `ref_hg19_weights` | `weights.hm3_noMHC.` |
+| `ref_hg19_print_snps` | CELLECT `print_snps.txt` (1,217,311 rsIDs) |
+| `ref_hg19_chr_sizes` | `GRCh37-chr-sizes.txt`, chr 1–22 |
+| `ref_hg19_w_hm3_snplist` | `w_hm3.snplist`, for `munge_sumstats.py --merge-alleles` |
+| `gene_matrix` | `geneMatrix.tsv.gz` |
 
-#### For MAGMA:
-- **MAGMA binary**: Download from https://cncr.nl/research/magma/
+Two easy mistakes:
 
-### Data Format Requirements
+- `--print-snps` must be CELLECT's `print_snps.txt`, **not** `hm3_no_MHC.list.txt`.
+- The baseline must be the **53-annotation** model, not baselineLD v2.x (97 annotations).
 
-#### Single-cell H5AD file:
-- Must contain:
-  - Raw or log-normalized counts in `adata.X`
-  - Cell type annotations in `adata.obs` (column specified by `--cell_type_col`)
-  - Gene names in `adata.var_names`
+No liftOver step is needed. CELLECT-LDSC and mBAT-combo are hg19 end to end,
+`seismicGWAS` never reads coordinates (it joins on gene ID), and CELLEX is
+coordinate-free. GWAS SNPs are reconciled to the reference by rsID.
 
-#### scDRS Covariate file (optional but recommended):
-- **Format**: Tab-delimited (TSV) file
-- **Required columns**:
-  - `SAMPLE_ID`: Cell barcode matching those in the h5ad file
-  - `N_GENE`: Number of genes detected per cell (technical covariate)
-  - `SEX`: Biological sex (categorical: M/F or 0/1)
-  - `AGE`: Age in years (numeric)
-- **Purpose**: Controls for technical (sequencing depth) and biological (sex, age) confounders in scDRS disease association testing
-- **Note**: This file should be prepared during single-cell pre-processing and quality control steps
+### Input h5ad
 
-#### GWAS Summary Statistics:
-- Tab-delimited or space-delimited text file (gzipped)
-- Must contain columns:
-  - SNP ID or rsID
-  - Chromosome
-  - Base pair position
-  - Effect allele (A1)
-  - Other allele (A2)
-  - P-value
-  - Optional: Beta, SE, N (sample size)
+- counts or log-normalized values in `adata.X` (declare which via `--h5ad_input_scale`)
+- Ensembl gene IDs in `var_names`
+- cell type labels in `adata.obs[<--cell_type_col>]`
 
 ## Installation
 
-1. **Clone the repository**:
 ```bash
 git clone https://github.com/PeterCAllen/CATCH-pipeline.git
 cd CATCH-pipeline
-```
 
-2. **Install Nextflow** (if not already installed):
-```bash
 curl -s https://get.nextflow.io | bash
-mv nextflow ~/bin/  # or add to your PATH
-```
+mv nextflow ~/bin/
 
-3. **Set up Singularity cache** (recommended):
-```bash
 export SINGULARITY_CACHEDIR=$HOME/.singularity
 mkdir -p $SINGULARITY_CACHEDIR
 ```
 
-## Configuration
-
-### Required Parameters
-
-Create a custom configuration file or specify parameters on the command line:
-
-```bash
-# Create a custom config file (e.g., my_config.config)
-params {
-    // ===== REQUIRED INPUT/OUTPUT =====
-    h5ad_input       = '/path/to/your/singlecell_data.h5ad'
-    gwas_sumstats    = '/path/to/your/gwas_summary_stats.txt.gz'
-    gwas_name        = 'MyGWAS'  // Short name for output files
-    outdir           = 'results/singlecell_data/MyGWAS'  // Recommended format
-    
-    // ===== GENOME BUILD (CRITICAL!) =====
-    genome_build     = 'hg19'  // Options: hg19, GRCh37, hg38, GRCh38
-    gwas_sample_size = 455258  // Total sample size of GWAS
-    
-    // ===== SINGLE-CELL PARAMETERS =====
-    cell_type_col    = 'cell_type'  // Column name with cell type annotations
-    
-    // ===== GENE COORDINATES =====
-    gene_matrix      = '/path/to/geneMatrix.tsv.gz'
-    
-    // ===== REFERENCE DATA: hg19/GRCh37 (ONLY) =====
-    // Note: Pipeline uses hg19 references for all analyses
-    // hg38 GWAS coordinates are automatically converted
-    ref_hg19_plink_prefix = '/path/to/1000G.EUR.hg19'
-    ref_hg19_baseline     = '/path/to/hg19/baseline/baselineLD.'
-    ref_hg19_weights      = '/path/to/hg19/weights/weights.hm3_noMHC.'
-    ref_hg19_hapmap3      = '/path/to/hg19/hm3_no_MHC.list.txt'
-    
-    // ===== MAGMA BINARY =====
-    magma_bin        = '/path/to/magma'  // or just 'magma' if in PATH
-    
-    // ===== OPTIONAL: scDRS COVARIATES =====
-    scdrs_cov_file   = '/path/to/covariates.tsv'  // Optional: TSV with SAMPLE_ID, N_GENE, SEX, AGE
-    
-    // ===== OPTIONAL: Analysis toggles =====
-    run_magma        = true
-    run_ldsc         = true
-    run_scdrs        = true
-}
-```
-
-### Output Directory Format
-
-**Recommended format**: `results/<single-cell-object>/<gwas-name>`
-
-Example:
-```bash
---outdir results/PBMC_10k/Height_GWAS
---outdir results/brain_cortex/Alzheimers_2023
---outdir results/liver_tissue/Type2Diabetes
-```
-
-This structure helps organize results when analyzing:
-- Multiple GWAS with the same single-cell dataset
-- Multiple single-cell datasets with the same GWAS
-- Many combinations of both
-
-### Cluster Configuration
-
-#### PBS Cluster
-
-If running on a PBS cluster, edit `conf/pbs.config` to match your system:
-
-```bash
-params {
-    pbs_project = 'ab12'                           // Your PBS project code
-    pbs_storage = 'scratch/ab12+gdata/ab12'       // Your storage paths
-}
-```
-
-You may also need to adjust:
-- Queue names in the `process.queue` selector
-- Module names if your cluster uses different environment modules
-- Scratch directory paths
-
-#### SLURM Cluster
-
-If running on a SLURM cluster, edit `conf/slurm.config` to match your system:
-
-```bash
-params {
-    slurm_account = 'def-username'                 // Your SLURM account/project
-    slurm_partition = 'compute'                    // Default partition name
-}
-```
-
-You may also need to adjust:
-- Partition names in the `process.queue` selector (e.g., 'highmem', 'hugemem')
-- Memory thresholds for automatic partition selection
-- Add `clusterOptions` for any cluster-specific SLURM flags (e.g., QoS)
-- Module loading if your cluster requires it
-
 ## Usage
 
-### Basic Usage (Local Execution)
-
 ```bash
 nextflow run main.nf \
-  --h5ad_input data/pbmc_10k.h5ad \
-  --gwas_sumstats data/height_gwas.txt.gz \
-  --gwas_name Height \
-  --genome_build hg19 \
-  --gwas_sample_size 253288 \
-  --gene_matrix data/reference/geneMatrix.tsv.gz \
-  --cell_type_col cell_type \
-  --outdir results/pbmc_10k/Height \
-  --ref_hg19_plink_prefix data/reference/1000G.EUR.hg19 \
-  --ref_hg19_baseline data/reference/hg19/baseline/baselineLD. \
-  --ref_hg19_weights data/reference/hg19/weights/weights.hm3_noMHC. \
-  --ref_hg19_hapmap3 data/reference/hg19/hm3_no_MHC.list.txt \
-  --magma_bin resources/magma \
-  --scdrs_cov_file data/pbmc_10k_covariates.tsv \
-  -profile standard
+    --h5ad_input data/singlecell/human_atlas.h5ad \
+    --gwas_sumstats data/gwas/AD_Jansen2019.txt.gz \
+    --gwas_name AD_Jansen2019 \
+    --genome_build hg19 \
+    --gwas_sample_size 455258 \
+    --gene_matrix data/reference/geneMatrix.tsv.gz \
+    --cell_type_col cell.labels \
+    --outdir results/human_atlas/AD_Jansen2019 \
+    -profile pbs
 ```
 
-### Cluster Execution
+`--gwas_name` must not contain `__` — that is CELLECT's `<specificity_id>__<annotation>`
+separator.
 
-#### PBS Cluster
+`nextflow run main.nf --help` lists every parameter.
+
+### Running components individually
+
+Each component can be validated on its own before trusting the combination:
 
 ```bash
-nextflow run main.nf \
-  -c my_config.config \
-  -profile pbs \
-  -resume
+# conLDSC only
+nextflow run main.nf --run_seismic false --run_scdrs false ...
+
+# seismic and scDRS only (skips the expensive LDSC branch)
+nextflow run main.nf --run_conldsc false ...
+
+# legacy MAGMA, to validate seismic against its native MAGMA input
+nextflow run main.nf --run_magma true --run_conldsc false --run_seismic false --run_scdrs false ...
 ```
 
-#### SLURM Cluster
+`COMBINE_CAUCHY` runs only when all four components are enabled; otherwise the
+per-component outputs are still produced and the pipeline warns.
+
+### Cross-trait FDR
 
 ```bash
-nextflow run main.nf \
-  -c my_config.config \
-  -profile slurm \
-  -resume
+Rscript bin/catch_fdr.R results/catch_fdr.tsv results/*/*/combined/*_catch_combined.tsv
 ```
 
-### Using a Custom Config File
+### Cluster configuration
 
-```bash
-# PBS cluster
-nextflow run main.nf -c my_config.config -profile pbs
+Edit `conf/pbs.config` for your system:
 
-# SLURM cluster
-nextflow run main.nf -c my_config.config -profile slurm
+```groovy
+params {
+    pbs_project = 'ab12'
+    pbs_storage = 'scratch/ab12+gdata/ab12'
+}
 ```
 
-## Analysis Options
+The queue is derived automatically from `task.memory`, so new processes should set a
+`label` (`low_mem` / `medium_mem` / `high_mem`) or a `withName` block rather than
+setting `queue` directly.
 
-### Toggle Individual Analyses
+There is no SLURM profile.
 
-```bash
---run_magma true   # Enable/disable MAGMA (default: true)
---run_ldsc true    # Enable/disable LDSC (default: true)
---run_scdrs true   # Enable/disable scDRS (default: true)
-```
-
-### Window Sizes
-
-```bash
---magma_window_kb 10    # MAGMA gene window (default: 10kb)
---ldsc_window_kb 100    # LDSC gene window (default: 100kb)
---scdrs_mbat_window_kb 50  # scDRS mBAT window (default: 50kb)
-```
-
-### scDRS-Specific Options
-
-```bash
---scdrs_top_genes 1000      # Top genes for gene set (default: 1000)
---scdrs_n_ctrl 1000         # Control gene sets (default: 1000)
---scdrs_filter_data "False" # Filter cells/genes: "True" or "False"
---scdrs_raw_count "True"    # Expect raw counts: "True" or "False"
---scdrs_cov_file covariates.tsv  # Optional: Covariate file (TSV format)
-```
-
-**Important**: 
-- `scdrs_filter_data` and `scdrs_raw_count` must be strings ("True" or "False"), not boolean values.
-- The covariate file is optional but recommended for controlling technical and biological confounders
-- Covariate file must contain columns: `SAMPLE_ID`, `N_GENE`, `SEX`, `AGE`
-
-## Output Structure
+## Output structure
 
 ```
-results/<single-cell-object>/<gwas-name>/
-├── cepo/
-│   ├── <dataset>_cepo_stats.tsv           # CEPO statistics per cell type
-│   └── <dataset>_cepo_stats.rds           # CEPO results (R object)
-├── magma/
-│   ├── <celltype>/
-│   │   ├── magma_geneset.txt              # Gene set definition
-│   │   ├── magma.genes.out                # Gene-level results
-│   │   └── magma.gsa.out                  # Gene set enrichment results
-│   └── magma_gsa_results.tsv              # Combined results across cell types
-├── ldsc/
-│   ├── <celltype>/
-│   │   ├── ldsc_*.results                 # LDSC output files
-│   │   └── ldsc_*.log                     # LDSC log files
-│   └── annotation_comparison.tsv          # Combined LDSC results
-├── scdrs/
-│   ├── <dataset>.scdrs_group.<gwas>.tsv   # Cell type group results
-│   ├── <dataset>.scdrs_ct.<gwas>.tsv      # Cell type results
-│   └── <dataset>.full_score.<gwas>.gz     # Full per-cell scores
+<outdir>/
+├── reference/                       gene coordinate files
+├── preprocessed/                    normalized h5ad, cell type mapping and counts
+├── metrics/
+│   ├── cepo/                        cepo_norm.csv, cepo_pvalues.csv, cepo_s.csv
+│   ├── cellex/                      ges.csv and the other CELLEX metrics
+│   └── sanitized/                   CELLECT-ready matrices + annotation lists
+├── conldsc/
+│   ├── gwas/                        harmonized and munged sumstats
+│   ├── cepo_norm/
+│   │   ├── precomputation/          all_genes.*.csv, *.ldcts.txt
+│   │   ├── control/                 all-genes control LD scores
+│   │   ├── prioritization/          *.cell_type_results.txt
+│   │   └── results/prioritization.csv
+│   └── ges/                         same layout
+├── mbat/                            per-chromosome and combined mBAT-combo results
+├── seismic/                         z-statistics, specificity, *_seismic.tsv
+├── scdrs/                           gene sets, cell scores, group results
 └── combined/
-    └── <gwas>_cauchy_combined.tsv         # Combined p-values from all methods
+    ├── <gwas>_catch_combined.tsv    CATCH p-values per cell type
+    └── <gwas>_catch_plot.png
 ```
 
-## Key Output Files
+### Key output files
 
-### CEPO Results
-- `*_cepo_stats.tsv`: Differentially expressed genes per cell type with statistics
+| File | Contents |
+|---|---|
+| `conldsc/<id>/results/prioritization.csv` | `gwas, specificity_id, annotation, beta, beta_se, pvalue` — CELLECT schema |
+| `seismic/<gwas>_seismic.tsv` | `cell_type, pvalue, FDR` |
+| `scdrs/results/*.scdrs_group.*` | per-cell-type `assoc_mcp`, `assoc_mcz`, `n_cell` |
+| `combined/<gwas>_catch_combined.tsv` | per cell type: the four component p-values, `CATCH_P`, `within_run_fdr` |
 
-### MAGMA Results
-- `magma_gsa_results.tsv`: Cell type enrichment p-values and betas
+## Validating against a reference run
 
-### LDSC Results
-- `annotation_comparison.tsv`: Heritability enrichment per cell type
+Check in this order — a mismatch at any stage is far easier to debug than a wrong final
+p-value:
 
-### scDRS Results
-- `*.scdrs_group.*.tsv`: Disease association scores per cell type
-- `*.scdrs_ct.*.tsv`: Detailed cell type statistics
-
-### Combined Results
-- `*_cauchy_combined.tsv`: Integrated p-values using Cauchy combination test
+1. **Preprocessing** — cell type list after the ≥20-cell filter; that everything
+   downstream inherits it.
+2. **Metrics** — `ges.csv` should be numerically *identical* to a CELLEX run on the same
+   input. Cepo uses 100 permutations (seeded at 602), so expect small differences there.
+3. **conLDSC** — compare in order: `genes_plus_100kb.<chr>.bed` row counts →
+   `COMBINED_ANNOT.<chr>.annot.gz` column sums (these become `.l2.M`) →
+   `.l2.ldscore.gz` correlation → `prioritization.csv`. Residual differences usually come
+   from the baseline version, CELLECT's 1-based→0-based BED start offset, or pandas float
+   formatting in the annot file.
+4. **seismic** — no published reference exists for this pairing. Check that
+   `qnorm(P_mBATcombo, lower.tail = FALSE)` is ~N(0,1) genome-wide, that gene overlap
+   exceeds 80%, and cross-check against seismic run on MAGMA output via the legacy module.
+5. **scDRS** — unchanged from previous releases apart from `--cov-file`,
+   `--flag-return-ctrl-norm-score` and `--flag-raw-count False`.
+6. **Cauchy** — the merged table must have the same cell type count as every input.
 
 ## Troubleshooting
 
-### Common Issues
+**Out of memory.** Cepo and CELLEX both need ~256 GB. Adjust `conf/pbs.config` and use
+`-resume`.
 
-1. **Out of memory errors**:
-   - CEPO analysis requires high memory (256GB recommended)
-   - Adjust `conf/pbs.config` resource allocations
-   - Use `-resume` to restart from checkpoint
+**`ldsc.py --h2-cts` fails or drops cell types.** LDSC hardcodes `_N_CHR = 22`, so all 22
+chromosomes must have succeeded. Dropped cell types are logged as `*CTS ERROR*` and are
+usually zero-variance annotations; `SANITIZE_SPECIFICITY` removes all-zero columns before
+they reach LDSC.
 
-2. **Missing reference files**:
-   - Verify all hg19 reference paths exist
-   - Only hg19 references are required (hg38 coordinates are automatically converted)
-   - Ensure per-chromosome PLINK files are present (chr 1-22)
-   - Verify combined reference files exist (without chromosome suffix)
+**Cauchy step fails with a cell type set difference.** A branch dropped cell types.
+Compare each component's output against `preprocessed/*.celltype_counts.tsv` to find
+which one and why — do not work around it by loosening the join.
 
-3. **Singularity/container issues**:
-   - Set `SINGULARITY_CACHEDIR` to writable location
-   - Check Singularity is available: `singularity --version`
-   - Try rebuilding container cache
+**`.gs` trait name is wrong.** `scdrs munge-gs` names the trait after the z-score column,
+so `MBAT_TO_TSV` names that column after `--gwas_name`. `MUNGE_SCDRS_GENESET` asserts this.
 
-4. **Pipeline fails at specific step**:
-   - Check `.nextflow.log` for detailed error messages
-   - Examine `work/` directory for process-specific logs
-   - Use `-resume` to continue from last successful step
-
-### Getting Help
+**Missing reference files.** Only hg19 references are needed. Verify per-chromosome PLINK
+files for chr 1–22 and that `print_snps.txt` and `GRCh37-chr-sizes.txt` are present.
 
 ```bash
 nextflow run main.nf --help
@@ -361,16 +310,21 @@ nextflow run main.nf --help
 
 ## Citation
 
-If you use this pipeline, please cite:
+If you use this pipeline, please cite the CATCH paper along with the component methods:
 
+- **CATCH**: Li A, Allen P, et al. *Benchmarking methods integrating GWAS and single-cell
+  transcriptomic data for mapping trait-cell type associations.*
 - **LDSC**: Bulik-Sullivan et al., Nature Genetics (2015)
-- **MAGMA**: de Leeuw et al., PLOS Computational Biology (2015)
+- **CELLECT**: Timshel et al., eLife (2020)
+- **Cepo**: Kim et al., Nature Computational Science (2021)
+- **CELLEX**: Timshel et al., eLife (2020)
+- **seismic**: Lai et al., Nature Communications (2025)
+- **mBAT-combo**: Li et al., American Journal of Human Genetics (2023)
 - **scDRS**: Zhang et al., Nature Genetics (2022)
-- **CEPO**: Kim et al., Nature Computational Science (2021)
 
 ## License
 
-This pipeline is distributed under the MIT License.
+MIT License.
 
 ## Authors
 
@@ -380,5 +334,4 @@ This pipeline is distributed under the MIT License.
 
 ## Contact
 
-For questions or issues, please open an issue on the GitHub repository:
 https://github.com/PeterCAllen/CATCH-pipeline/issues
