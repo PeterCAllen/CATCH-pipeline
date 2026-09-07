@@ -39,10 +39,17 @@ def helpMessage() {
 
     Required Arguments:
       --h5ad_input PATH          Path to input h5ad file
-      --gwas_sumstats PATH       Path to GWAS summary statistics (gzipped)
       --gwas_name STR            Short trait identifier (must not contain '__')
       --genome_build STR         Genome build (hg19/GRCh37 or hg38/GRCh38)
       --gwas_sample_size INT     Total sample size for GWAS study
+
+    GWAS summary statistics (at least one required):
+      --gwas_sumstats PATH       Raw GWAS sumstats (gzipped); reformatted internally
+                                 for each branch that needs it
+      --gwas_cojo PATH           Pre-formatted GCTA-COJO .ma (SNP A1 A2 freq b se p N);
+                                 bypasses reformatting for the seismic/scDRS branch
+      --gwas_sumstats_munged PATH  Pre-munged LDSC .sumstats.gz; bypasses munging for
+                                 the conLDSC branch
       --gene_matrix PATH         Path to geneMatrix.tsv.gz file
       --cell_type_col STR        Column in h5ad.obs with cell types [${params.cell_type_col}]
 
@@ -120,12 +127,15 @@ def validateParams(flags) {
     def errors = []
 
     if (!params.h5ad_input)      errors.add("--h5ad_input is required")
-    if (!params.gwas_sumstats)   errors.add("--gwas_sumstats is required")
     if (!params.gwas_name)       errors.add("--gwas_name is required")
     if (!params.genome_build)    errors.add("--genome_build is required (hg19/GRCh37 or hg38/GRCh38)")
     if (!params.gwas_sample_size) errors.add("--gwas_sample_size is required")
     if (!params.gene_matrix)     errors.add("--gene_matrix is required")
     if (!params.cell_type_col)   errors.add("--cell_type_col is required")
+
+    if (!params.gwas_sumstats && !params.gwas_cojo && !params.gwas_sumstats_munged) {
+        errors.add("at least one of --gwas_sumstats, --gwas_cojo, --gwas_sumstats_munged is required")
+    }
 
     if (params.gwas_name?.contains('__')) {
         errors.add("--gwas_name must not contain '__' (the CELLECT '<id>__<annotation>' separator)")
@@ -135,9 +145,18 @@ def validateParams(flags) {
         errors.add("--run_conldsc requires at least one of --run_cepo / --run_cellex")
     }
 
+    if (flags.conldsc && !params.gwas_sumstats && !params.gwas_sumstats_munged) {
+        errors.add("--run_conldsc requires --gwas_sumstats or --gwas_sumstats_munged")
+    }
+
+    if ((flags.seismic || flags.scdrs) && !params.gwas_sumstats && !params.gwas_cojo) {
+        errors.add("--run_seismic/--run_scdrs require --gwas_sumstats or --gwas_cojo")
+    }
+
     if (flags.magma) {
         if (!params.magma_bin) errors.add("--magma_bin is required when --run_magma is set")
         if (!flags.cepo)       errors.add("--run_magma requires --run_cepo (gene sets are built from Cepo)")
+        if (!params.gwas_sumstats) errors.add("--run_magma requires --gwas_sumstats (no pre-formatted bypass for MAGMA)")
     }
 
     if (errors.size() > 0) {
@@ -202,7 +221,9 @@ workflow {
     """.stripIndent()
 
     ch_h5ad         = Channel.fromPath(params.h5ad_input,    checkIfExists: true)
-    ch_gwas         = Channel.fromPath(params.gwas_sumstats, checkIfExists: true)
+    ch_gwas         = params.gwas_sumstats
+        ? Channel.fromPath(params.gwas_sumstats, checkIfExists: true)
+        : Channel.empty()
     ch_gene_matrix  = Channel.fromPath(params.gene_matrix,   checkIfExists: true)
     ch_genome_build = Channel.value(genome_build)
 
@@ -226,18 +247,25 @@ workflow {
 
     // --- 3b. conLDSC-Cepo and conLDSC-GES ---
     if (flags.conldsc) {
-        ch_ref_bim = Channel.value(file(params.ref_hg19_bim_file, checkIfExists: true))
-        CONVERT_GWAS_FOR_LDSC(ch_gwas, ch_genome_build, ch_ref_bim)
+        if (params.gwas_sumstats_munged) {
+            // Pre-munged LDSC sumstats supplied directly; skip CONVERT_GWAS_FOR_LDSC + MUNGE_SUMSTATS.
+            ch_gwas_munged = Channel.fromPath(params.gwas_sumstats_munged, checkIfExists: true)
+        } else {
+            ch_ref_bim = Channel.value(file(params.ref_hg19_bim_file, checkIfExists: true))
+            CONVERT_GWAS_FOR_LDSC(ch_gwas, ch_genome_build, ch_ref_bim)
 
-        MUNGE_SUMSTATS(
-            CONVERT_GWAS_FOR_LDSC.out.formatted_gwas,
-            Channel.value(file(params.ref_hg19_w_hm3_snplist, checkIfExists: true))
-        )
+            MUNGE_SUMSTATS(
+                CONVERT_GWAS_FOR_LDSC.out.formatted_gwas,
+                Channel.value(file(params.ref_hg19_w_hm3_snplist, checkIfExists: true))
+            )
+
+            ch_gwas_munged = MUNGE_SUMSTATS.out.gwas_munged
+        }
 
         CONLDSC(
             ch_specificity,
             METRICS.out.annotations,
-            MUNGE_SUMSTATS.out.gwas_munged,
+            ch_gwas_munged,
             PREPARE_GENE_COORDS.out.cellect_loc
         )
 

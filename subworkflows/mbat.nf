@@ -18,9 +18,15 @@ workflow MBAT {
         def plink_dir    = params.ref_hg19_plink_dir
         def plink_prefix = new File(params.ref_hg19_plink_prefix).name
 
-        ch_ref_bim = Channel.value(file(params.ref_hg19_bim_file, checkIfExists: true))
+        if (params.gwas_cojo) {
+            // Pre-formatted GCTA-COJO .ma supplied directly; skip FORMAT_GWAS_FOR_MBAT.
+            ch_formatted_gwas = Channel.fromPath(params.gwas_cojo, checkIfExists: true)
+        } else {
+            ch_ref_bim = Channel.value(file(params.ref_hg19_bim_file, checkIfExists: true))
+            FORMAT_GWAS_FOR_MBAT(gwas_sumstats, genome_build, ch_ref_bim)
+            ch_formatted_gwas = FORMAT_GWAS_FOR_MBAT.out.formatted_gwas
+        }
 
-        FORMAT_GWAS_FOR_MBAT(gwas_sumstats, genome_build, ch_ref_bim)
         PREPARE_MBAT_GENES(gene_coords)
 
         ch_chr_plink = Channel.of(1..22).map { chr ->
@@ -32,7 +38,7 @@ workflow MBAT {
         }
 
         ch_mbat_input = Channel.of(1..22)
-            .combine(FORMAT_GWAS_FOR_MBAT.out.formatted_gwas)
+            .combine(ch_formatted_gwas)
             .combine(PREPARE_MBAT_GENES.out.mbat_genes)
             .combine(ch_chr_plink, by: 0)
             .map { chr, gwas, genes, prefix, plink_files ->
@@ -55,7 +61,7 @@ workflow MBAT {
         COMBINE_MBAT(ch_mbat_collected)
 
     emit:
-        formatted_gwas = FORMAT_GWAS_FOR_MBAT.out.formatted_gwas
+        formatted_gwas = ch_formatted_gwas
         mbat_genes     = PREPARE_MBAT_GENES.out.mbat_genes
         mbat_combined  = COMBINE_MBAT.out.mbat_combined
 }

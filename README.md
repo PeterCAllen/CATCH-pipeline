@@ -64,6 +64,17 @@ nextflow run main.nf \
 
 `nextflow run main.nf --help` lists all parameters.
 
+If you already have pre-formatted GWAS files (as consortium GWAS are often
+distributed), skip the pipeline's own reformatting and pass them directly instead of
+`--gwas_sumstats`:
+- `--gwas_cojo <trait>.ma` — GCTA-COJO format (`SNP A1 A2 freq b se p N`), bypasses
+  reformatting for the seismic/scDRS (mBAT-combo) branch.
+- `--gwas_sumstats_munged <trait>.sumstats.gz` — pre-munged LDSC format, bypasses
+  `munge_sumstats.py` for the conLDSC branch.
+
+At least one of `--gwas_sumstats` / `--gwas_cojo` / `--gwas_sumstats_munged` is required,
+depending on which components you run.
+
 Components can be run individually, for example `--run_cellex true --run_scdrs false`.
 The Cauchy combination (CATCH) runs only when `--run_conldsc --run_cepo --run_scdrs`
 are all enabled; `--run_cellex`/`--run_seismic` are optional validation branches and
