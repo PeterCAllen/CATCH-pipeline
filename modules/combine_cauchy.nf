@@ -1,5 +1,5 @@
 // modules/combine_cauchy.nf
-// CATCH: Cauchy (ACAT) combination of the four component p-values, per cell type.
+// CATCH: Cauchy (ACAT) combination of the two component p-values, per cell type.
 
 process COMBINE_CAUCHY {
     tag "${gwas_name}"

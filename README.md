@@ -1,12 +1,16 @@
 # CATCH Pipeline
 
-Nextflow implementation of CATCH (Li et al.), which combines four methods via Cauchy
+Nextflow implementation of CATCH (Li et al.), which combines two methods via Cauchy
 combination to map trait–cell type associations from GWAS and scRNA-seq data:
 
 1. **conLDSC-Cepo** — CELLECT-LDSC on a Cepo specificity matrix
-2. **conLDSC-GES** — CELLECT-LDSC on the CELLEX GES matrix
-3. **seismic-mBAT-combo** — `seismicGWAS` using mBAT-combo z-statistics
-4. **scDRS** — scored on an mBAT-combo gene set
+2. **scDRS** — scored on an mBAT-combo gene set
+
+Two further methods remain available as optional, off-by-default validation branches
+(not part of the CATCH combination itself):
+
+- **conLDSC-GES** — CELLECT-LDSC on the CELLEX GES matrix (`--run_cellex true`)
+- **seismic-mBAT-combo** — `seismicGWAS` using mBAT-combo z-statistics (`--run_seismic true`)
 
 MAGMA-GSEA and binary LDSC are in `modules/legacy/` and are off by default.
 
@@ -60,8 +64,10 @@ nextflow run main.nf \
 
 `nextflow run main.nf --help` lists all parameters.
 
-Components can be run individually, for example `--run_seismic false --run_scdrs false`.
-The Cauchy combination runs only when all four are enabled.
+Components can be run individually, for example `--run_cellex true --run_scdrs false`.
+The Cauchy combination (CATCH) runs only when `--run_conldsc --run_cepo --run_scdrs`
+are all enabled; `--run_cellex`/`--run_seismic` are optional validation branches and
+are not required for (or included in) the combination.
 
 The paper applies FDR across all cell types *and traits*. One run covers one trait, so
 after running every trait:
@@ -75,15 +81,15 @@ Rscript bin/catch_fdr.R results/catch_fdr.tsv results/*/combined/*_catch_combine
 ```
 <outdir>/
 ├── preprocessed/   normalized h5ad, cell type mapping
-├── metrics/        Cepo and CELLEX specificity matrices
+├── metrics/        Cepo (and, if enabled, CELLEX) specificity matrices
 ├── conldsc/        prioritization.csv per specificity matrix
 ├── mbat/           mBAT-combo results
-├── seismic/        <gwas>_seismic.tsv
+├── seismic/        <gwas>_seismic.tsv (only if --run_seismic true)
 ├── scdrs/          cell scores and group results
 └── combined/       <gwas>_catch_combined.tsv
 ```
 
-`combined/<gwas>_catch_combined.tsv` is the main result: the four component p-values and
+`combined/<gwas>_catch_combined.tsv` is the main result: the two component p-values and
 `CATCH_P` for each cell type.
 
 ## Layout

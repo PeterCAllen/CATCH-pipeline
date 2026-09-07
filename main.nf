@@ -3,8 +3,11 @@ nextflow.enable.dsl=2
 
 //
 // CATCH — Cell-type Associations with Traits via CaucHy combination of strategies
-// (Li et al.). Cauchy combination of four components:
-//   conLDSC-Cepo, conLDSC-GES, seismic-mBAT-combo, scDRS
+// (Li et al.). Cauchy combination of two components:
+//   conLDSC-Cepo, scDRS (mBAT-combo based)
+//
+// conLDSC-GES and seismic-mBAT-combo remain available as optional, off-by-default
+// validation branches (see --run_cellex / --run_seismic) but are not part of CATCH.
 //
 
 include { asBool } from './lib/util'
@@ -31,8 +34,8 @@ def helpMessage() {
     Usage:
       nextflow run main.nf --h5ad_input <file> --gwas_sumstats <file> --genome_build <hg19|hg38> --gwas_sample_size <N> [options]
 
-    CATCH combines four components via Cauchy combination (Li et al.):
-      conLDSC-Cepo, conLDSC-GES, seismic-mBAT-combo, scDRS
+    CATCH combines two components via Cauchy combination (Li et al.):
+      conLDSC-Cepo, scDRS (mBAT-combo based)
 
     Required Arguments:
       --h5ad_input PATH          Path to input h5ad file
@@ -52,7 +55,8 @@ def helpMessage() {
 
     Specificity metrics:
       --run_cepo BOOL               Compute Cepo [${params.run_cepo}]
-      --run_cellex BOOL             Compute CELLEX (provides GES) [${params.run_cellex}]
+      --run_cellex BOOL             Compute CELLEX (provides GES); optional validation
+                                     branch, not part of CATCH [${params.run_cellex}]
       --cepo_compute_pvalue INT     Cepo permutations [${params.cepo_compute_pvalue}]
       --cepo_prefilter_pzero FLOAT  Cepo prefilter_pzero [${params.cepo_prefilter_pzero}]
 
@@ -68,7 +72,7 @@ def helpMessage() {
     mBAT-combo (shared by seismic and scDRS):
       --mbat_window_kb INT          TSS/TES window in kb [${params.mbat_window_kb}]
 
-    seismic:
+    seismic (optional validation branch, not part of CATCH):
       --run_seismic BOOL            Run seismic-mBAT-combo [${params.run_seismic}]
       --seismic_assay STR           Assay for calc_specificity [${params.seismic_assay}]
       --seismic_lognorm BOOL        Run scater::logNormCounts first [${params.seismic_lognorm}]
@@ -164,7 +168,7 @@ workflow {
     if (genome_build == 'grch37') genome_build = 'hg19'
     if (genome_build == 'grch38') genome_build = 'hg38'
 
-    def catch_ready = flags.conldsc && flags.cepo && flags.cellex && flags.seismic && flags.scdrs
+    def catch_ready = flags.conldsc && flags.cepo && flags.scdrs
 
     log.info """
     =====================================================
@@ -179,17 +183,17 @@ workflow {
      gwas_sample_size : ${params.gwas_sample_size}
      cell_type_col    : ${params.cell_type_col}
 
-     Components
-     ----------
+     CATCH Components
+     ----------------
      conLDSC-Cepo         : ${flags.conldsc && flags.cepo} (variant: ${params.conldsc_cepo_variant})
+     scDRS                : ${flags.scdrs}
+     CATCH ready          : ${catch_ready}
+
+     Optional validation branches (not part of CATCH)
+     --------------------------------------------------
      conLDSC-GES          : ${flags.conldsc && flags.cellex}
      seismic-mBAT-combo   : ${flags.seismic}
-     scDRS                : ${flags.scdrs}
-     4-way Cauchy (CATCH) : ${catch_ready}
-
-     Legacy (not part of CATCH)
-     --------------------------
-     MAGMA-GSEA       : ${flags.magma}
+     MAGMA-GSEA           : ${flags.magma}
 
      Output
      ------
@@ -291,7 +295,7 @@ workflow {
         )
     }
 
-    // --- 6. CATCH: Cauchy combination of the four components ---
+    // --- 6. CATCH: Cauchy combination of the two components ---
     if (catch_ready) {
         def h5ad_name = file(params.h5ad_input).simpleName
 
@@ -299,17 +303,11 @@ workflow {
             .filter { id, f -> id in ['cepo_norm', 'cepo_s'] }
             .map { id, f -> f }
 
-        ch_ges_prior = ch_prioritization
-            .filter { id, f -> id == 'ges' }
-            .map { id, f -> f }
-
         // Build the --method specs from the real staged filenames so they cannot drift.
-        def CATCH_ORDER = ['conLDSC_Cepo', 'conLDSC_GES', 'seismic_mBATcombo', 'scDRS']
+        def CATCH_ORDER = ['conLDSC_Cepo', 'scDRS']
 
-        ch_methods = ch_cepo_prior.map   { f -> tuple('conLDSC_Cepo',      "conLDSC_Cepo=${f.name}=annotation=pvalue",     f) }
-            .mix(ch_ges_prior.map        { f -> tuple('conLDSC_GES',       "conLDSC_GES=${f.name}=annotation=pvalue",      f) })
-            .mix(ch_seismic.map          { f -> tuple('seismic_mBATcombo', "seismic_mBATcombo=${f.name}=cell_type=pvalue", f) })
-            .mix(ch_scdrs_group.map      { f -> tuple('scDRS',             "scDRS=${f.name}=group=assoc_mcp",              f) })
+        ch_methods = ch_cepo_prior.map { f -> tuple('conLDSC_Cepo', "conLDSC_Cepo=${f.name}=annotation=pvalue", f) }
+            .mix(ch_scdrs_group.map    { f -> tuple('scDRS',        "scDRS=${f.name}=group=assoc_mcp",          f) })
             .toList()
             .map { rows ->
                 if (rows.size() != CATCH_ORDER.size()) {
@@ -327,8 +325,7 @@ workflow {
         )
     }
     else {
-        log.warn "CATCH combination skipped: all four components must be enabled " +
-                 "(--run_conldsc --run_cepo --run_cellex --run_seismic --run_scdrs). " +
+        log.warn "CATCH combination skipped: --run_conldsc, --run_cepo, and --run_scdrs must all be enabled. " +
                  "Per-component results are still produced."
     }
 }
