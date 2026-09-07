@@ -7,9 +7,11 @@ From: condaforge/mambaforge:23.3.1-1
 %post
     set -eu
 
+    # numpy pinned <1.24: cellex==1.2.2's own source (cellex/preprocessing/anova.py)
+    # calls the deprecated `np.float` alias, removed in numpy 1.24.
     mamba install -y -c conda-forge -c bioconda \
         python=3.9 \
-        numpy \
+        "numpy<1.24" \
         pandas \
         scipy \
         h5py \
@@ -20,7 +22,8 @@ From: condaforge/mambaforge:23.3.1-1
 
     mamba clean -afy
 
-    python -c "import cellex, scanpy; print('cellex', cellex.__version__); print('scanpy', scanpy.__version__)"
+    # cellex has no __version__ attribute; just confirm it imports.
+    python -c "import cellex, scanpy; print('cellex OK'); print('scanpy', scanpy.__version__)"
 
 %environment
     export LC_ALL=C.UTF-8

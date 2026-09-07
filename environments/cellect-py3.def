@@ -7,7 +7,20 @@ From: condaforge/mambaforge:23.3.1-1
 %post
     set -eu
 
-    mamba install -y -c conda-forge -c bioconda \
+    # The base image's bundled mamba is frozen at its 2023 build and fails to solve
+    # this environment (very old py3.6/numpy1.16/pandas0.24 pins) against current
+    # conda-forge repodata. Bootstrap a current micromamba and use that instead.
+    # (This base image has neither curl nor wget by default.)
+    apt-get update && apt-get install -y --no-install-recommends wget && \
+        rm -rf /var/lib/apt/lists/*
+    wget -qO- https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xj -C /usr/local/bin bin/micromamba --strip-components=1
+
+    # Install into a FRESH prefix, not the base image's existing /opt/conda --
+    # micromamba's package cache collides with the base image's own conda
+    # install's pre-existing pkgs cache at that path ("Cannot find a valid
+    # extracted directory cache" during linking).
+    export MAMBA_ROOT_PREFIX=/opt/micromamba
+    /usr/local/bin/micromamba create -y -p /opt/cellect-env -c conda-forge -c bioconda \
         python=3.6.9 \
         pandas=0.24.2 \
         numpy=1.16.3 \
@@ -16,14 +29,15 @@ From: condaforge/mambaforge:23.3.1-1
         bedtools=2.27.1 \
         bedops=2.4.37
 
-    mamba clean -afy
+    /usr/local/bin/micromamba clean -afy
 
-    python -c "import pandas, numpy, pybedtools; print('pandas', pandas.__version__); print('numpy', numpy.__version__)"
-    bedops --version
-    bedmap --version
-    bedtools --version
+    /opt/cellect-env/bin/python -c "import pandas, numpy, pybedtools; print('pandas', pandas.__version__); print('numpy', numpy.__version__)"
+    /opt/cellect-env/bin/bedops --version
+    /opt/cellect-env/bin/bedmap --version
+    /opt/cellect-env/bin/bedtools --version
 
 %environment
+    export PATH=/opt/cellect-env/bin:$PATH
     export LC_ALL=C.UTF-8
     export OMP_NUM_THREADS=1
     export NUMBA_CACHE_DIR=/tmp
