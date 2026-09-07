@@ -11,26 +11,31 @@ From: bioconductor/bioconductor_docker:RELEASE_3_18
         libhdf5-dev libcurl4-openssl-dev libssl-dev libxml2-dev && \
         rm -rf /var/lib/apt/lists/*
 
-    Rscript -e 'options(warn = 2); \
-        install.packages(c("remotes", "data.table", "ggplot2", "ggrepel", "magrittr", "Matrix", "speedglm"), \
-                         repos = "https://packagemanager.posit.co/cran/2024-06-03")'
+    # NOTE: every Rscript -e below is kept on ONE physical line, no backslash
+    # continuation. Singularity's def-file parser scans raw lines for section
+    # headers anywhere in the file, so a wrapped line whose first token happens
+    # to be an R infix operator like `%in%` gets misread as an invalid section.
 
-    Rscript -e 'options(warn = 2); \
-        BiocManager::install(c("SingleCellExperiment", "SummarizedExperiment", "AnnotationDbi", \
-                               "org.Hs.eg.db", "zellkonverter", "scater", "basilisk"), ask = FALSE, update = FALSE)'
+    # Snapshot pinned before R 4.4's release (2024-04-24): bioconductor_docker:RELEASE_3_18
+    # ships R 4.3.3, and the 2024-06-03 snapshot's Matrix (1.7-0) requires R>=4.4.
+    Rscript -e 'options(warn = 2); install.packages(c("remotes", "data.table", "ggplot2", "ggrepel", "magrittr", "Matrix", "speedglm"), repos = "https://packagemanager.posit.co/cran/2024-03-01")'
+
+    Rscript -e 'options(warn = 2); BiocManager::install(c("SingleCellExperiment", "SummarizedExperiment", "AnnotationDbi", "org.Hs.eg.db", "zellkonverter", "scater", "basilisk"), ask = FALSE, update = FALSE)'
 
     # seismicGWAS has no CRAN/Bioconductor release and no git tags, so pin by commit.
-    Rscript -e 'options(warn = 2); \
-        remotes::install_github("ylaboratory/seismic", ref = "1d29b5dea9f51132c246e6587d5eb7f4c2b769c2", \
-                                upgrade = "never")'
+    Rscript -e 'options(warn = 2); remotes::install_github("ylaboratory/seismic", ref = "1d29b5dea9f51132c246e6587d5eb7f4c2b769c2", upgrade = "never")'
 
-    Rscript -e 'library(seismicGWAS); \
-        stopifnot(all(c("calc_specificity", "get_ct_trait_associations", "translate_gene_ids") \
-                      %in% getNamespaceExports("seismicGWAS")))'
+    Rscript -e 'library(seismicGWAS); exports <- getNamespaceExports("seismicGWAS"); stopifnot(all(c("calc_specificity", "get_ct_trait_associations", "translate_gene_ids") %in% exports))'
 
 %environment
     export LC_ALL=C.UTF-8
     export OMP_NUM_THREADS=1
+    # Nextflow's PBS+singularity task wrapper runs with `singularity exec --no-home`
+    # and a stripped host environment, so $HOME never resolves to a real, existing
+    # directory on the compute node. zellkonverter::readH5AD() (used by run_seismic.R)
+    # uses basilisk, which needs ~/.cache/R/basilisk to exist -- set HOME to something
+    # that always exists inside the container itself.
+    export HOME=/tmp
 
 %runscript
     exec Rscript "$@"
