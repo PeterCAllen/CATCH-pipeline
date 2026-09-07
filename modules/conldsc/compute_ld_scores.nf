@@ -5,7 +5,7 @@ process COMPUTE_LD_SCORES {
     tag "${specificity_id}:chr${chr}"
     label 'medium_mem'
 
-    container "${projectDir}/environments/ldsc-timshel.sif"
+    container "${projectDir}/environments/ldsc-py3.sif"
 
     input:
     tuple val(specificity_id), val(chr), path(annot), path(plink_files), path(print_snps)
@@ -45,7 +45,7 @@ process COMPUTE_LD_SCORES_ALL_GENES {
     label 'medium_mem'
     publishDir { "${params.outdir}/conldsc/${specificity_id}/control" }, mode: 'copy'
 
-    container "${projectDir}/environments/ldsc-timshel.sif"
+    container "${projectDir}/environments/ldsc-py3.sif"
 
     input:
     tuple val(specificity_id), val(chr), path(annot), path(plink_files), path(print_snps)

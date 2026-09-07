@@ -5,7 +5,7 @@ process MUNGE_SUMSTATS {
     label 'medium_mem'
     publishDir "${params.outdir}/conldsc/gwas", mode: 'copy'
 
-    container "${projectDir}/environments/ldsc-timshel.sif"
+    container "${projectDir}/environments/ldsc-py3.sif"
 
     input:
     path gwas_formatted

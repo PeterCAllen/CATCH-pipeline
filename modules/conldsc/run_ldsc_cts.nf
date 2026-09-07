@@ -6,7 +6,7 @@ process RUN_LDSC_CTS {
     label 'medium_mem'
     publishDir { "${params.outdir}/conldsc/${specificity_id}/prioritization" }, mode: 'copy'
 
-    container "${projectDir}/environments/ldsc-timshel.sif"
+    container "${projectDir}/environments/ldsc-py3.sif"
 
     input:
     tuple val(specificity_id),
