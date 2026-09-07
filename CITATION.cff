@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software, please cite the CATCH paper (Li et al.) along with the
+  component methods it wraps: LDSC (Bulik-Sullivan et al. 2015), CELLECT and CELLEX
+  (Timshel et al. 2020), Cepo (Kim et al. 2021), seismic (Lai et al. 2025), mBAT-combo
+  (Li et al. 2023), and scDRS (Zhang et al. 2022). See the README's Citation section
+  for the full reference list.
+title: CATCH Pipeline
+authors:
+  - name: "Ang Li"
+  - name: "Jian Zeng"
+  - given-names: "Peter"
+    family-names: "Allen"
+repository-code: "https://github.com/PeterCAllen/CATCH-pipeline"
+license: MIT
+type: software
