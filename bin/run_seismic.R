@@ -28,7 +28,7 @@ for (i in seq_along(args)) {
   if (args[i] == "--lognorm")       lognorm       <- tolower(args[i + 1]) %in% c("true", "yes", "1")
 }
 
-sce <- readH5AD(input_h5ad)
+sce <- readH5AD(input_h5ad, reader = "R")
 cat("Loaded", ncol(sce), "cells x", nrow(sce), "genes\n")
 
 if (!cell_type_col %in% colnames(colData(sce))) {

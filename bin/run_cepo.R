@@ -32,7 +32,7 @@ cat("Cell type column:", cell_type_col, "\n")
 cat("computePvalue   :", compute_pvalue, "\n")
 cat("prefilter_pzero :", prefilter_pzero, "\n")
 
-sce <- readH5AD(input_h5ad)
+sce <- readH5AD(input_h5ad, reader = "R")
 cat("Loaded", ncol(sce), "cells x", nrow(sce), "genes\n")
 
 if (!cell_type_col %in% colnames(colData(sce))) {
