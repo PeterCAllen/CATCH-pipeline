@@ -97,7 +97,8 @@ Rscript bin/catch_fdr.R results/catch_fdr.tsv results/*/combined/*_catch_combine
 ├── mbat/           mBAT-combo results
 ├── seismic/        <gwas>_seismic.tsv (only if --run_seismic true)
 ├── scdrs/          cell scores and group results
-└── combined/       <gwas>_catch_combined.tsv
+├── combined/       <gwas>_catch_combined.tsv
+└── pipeline_info/  execution_trace/report/timeline (compute-hours, peak memory, etc.)
 ```
 
 `combined/<gwas>_catch_combined.tsv` is the main result: the two component p-values and
