@@ -1,0 +1,28 @@
+Bootstrap: docker
+From: condaforge/mambaforge:23.3.1-1
+
+%labels
+    Description scdrs==1.0.2 (perform-downstream group analysis). Exact version pinned by the container's own filename, unlike py-r-cepo-scdrs.sif's other dependencies.
+
+%post
+    set -eu
+
+    # numpy pinned <2: scdrs==1.0.2's scikit-misc dependency ships wheels built
+    # against the numpy 1.x C-ABI; numpy>=2 breaks it at import time (ValueError:
+    # numpy.dtype size changed).
+    mamba create -y -n scdrs -c conda-forge \
+        python=3.9 "numpy<2" pandas scipy anndata statsmodels
+
+    /opt/conda/envs/scdrs/bin/pip install --no-cache-dir scdrs==1.0.2
+
+    mamba clean -afy
+
+    /opt/conda/envs/scdrs/bin/scdrs --help > /dev/null
+
+%environment
+    export PATH=/opt/conda/envs/scdrs/bin:$PATH
+    export LC_ALL=C.UTF-8
+    export OMP_NUM_THREADS=1
+
+%runscript
+    exec "$@"

@@ -1,0 +1,32 @@
+Bootstrap: docker
+From: debian:12-slim
+
+%labels
+    Description GCTA v1.94.1 static binary (mBAT-combo). Minimal container: no R/Python needed.
+    Note Exact upstream release; unambiguous, unlike the other two authored .def files in this repo.
+
+%post
+    set -eu
+    # procps provides `ps`, which Nextflow's PBS + -with-trace task wrapper
+    # requires to be present before running ANY command -- without it the task
+    # exits 1 before gcta64 ever runs, with no error visible from gcta64 itself.
+    apt-get update && apt-get install -y --no-install-recommends ca-certificates wget procps && \
+        rm -rf /var/lib/apt/lists/*
+
+    mkdir -p /opt/gcta
+    wget -q -O /opt/gcta/gcta64 \
+        "https://github.com/jianyangqt/gcta/releases/download/v1.94.1/gcta-1.94.1-linux-x86_64-static"
+    chmod +x /opt/gcta/gcta64
+
+    # gcta64 has no --version flag (or any no-op flag) -- it always prints its
+    # version banner to stdout before parsing arguments, then exits non-zero
+    # complaining about missing/invalid options regardless of what's passed. We
+    # deliberately don't check gcta64's own exit code (no `set -o pipefail`
+    # here), just that the banner appears -- proof the binary runs.
+    /opt/gcta/gcta64 --out /tmp/gcta_smoketest 2>&1 | grep -q "Genome-wide Complex Trait Analysis"
+
+%environment
+    export PATH=/opt/gcta:$PATH
+
+%runscript
+    exec "$@"
