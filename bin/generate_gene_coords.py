@@ -74,6 +74,14 @@ def main(args):
     df_coords = df_coords[~df_coords['chr'].isin(['M', 'X', 'Y'])]
     log_message(f"After restricting to autosomes 1-22: {df_coords.shape}")
 
+    # mBAT-combo is a pure GWAS/LD-based gene test with no expression-quantification
+    # rationale for excluding non-coding loci (unlike Cepo/scDRS, where protein-coding
+    # restriction is about scRNA-seq measurement reliability). Always give mBAT the
+    # full gene set, independent of --protein_coding/--no_protein_coding below.
+    df_mbat = df_coords.copy()
+    df_mbat.sort_values(by=['chr', 'start', 'end'], inplace=True)
+    log_message(f"mBAT gene coordinates (unfiltered, all gene types): {df_mbat.shape}")
+
     if args.protein_coding:
         if 'gene_type' not in df_coords.columns:
             raise ValueError(
@@ -100,12 +108,18 @@ def main(args):
     df_coords.sort_values(by=['chr', 'start', 'end'], inplace=True)
     log_message(f"Gene coordinates (hg19): {df_coords.shape}")
 
-    # === Output 1: LDSC/mBAT version (chr, start, end, Gene) - NO HEADER - hg19 ===
-    log_message("Creating LDSC/mBAT gene coordinate file (hg19)...")
+    # === Output 1: LDSC version (chr, start, end, Gene) - NO HEADER - hg19 ===
+    log_message("Creating LDSC gene coordinate file (hg19)...")
     df_ldsc_out = df_coords[['chr', 'start', 'end', 'Gene']].copy()
     df_ldsc_out.to_csv(args.output_ldsc, sep='\t', index=False, header=False)
     log_message(f"LDSC gene coordinate file saved to {args.output_ldsc} ({len(df_ldsc_out)} genes, hg19 coordinates)")
-    
+
+    # === Output mBAT: always the full (unfiltered) gene set (chr, start, end, Gene) - NO HEADER ===
+    log_message("Creating mBAT gene coordinate file (hg19, unfiltered)...")
+    df_mbat_out = df_mbat[['chr', 'start', 'end', 'Gene']].copy()
+    df_mbat_out.to_csv(args.output_mbat, sep='\t', index=False, header=False)
+    log_message(f"mBAT gene coordinate file saved to {args.output_mbat} ({len(df_mbat_out)} genes, hg19 coordinates)")
+
     # === Output 2: MAGMA version (Gene, chr, start, end, strand, gene_name) - NO HEADER - hg19 ===
     log_message("Creating MAGMA gene coordinate file (hg19)...")
     df_magma_out = df_coords[['Gene', 'chr', 'start', 'end', coord_strand_col, 'gene_name']].copy()
@@ -145,8 +159,10 @@ if __name__ == '__main__':
                         help='Genome build (hg19, GRCh37, hg38, or GRCh38)')
     parser.add_argument('--output_magma', type=str, required=True, 
                         help='Path for the output MAGMA gene location file (no header)')
-    parser.add_argument('--output_ldsc', type=str, required=True, 
+    parser.add_argument('--output_ldsc', type=str, required=True,
                         help='Path for the output LDSC gene location file (no header)')
+    parser.add_argument('--output_mbat', type=str, required=True,
+                        help='Path for the output mBAT gene location file (no header, always unfiltered)')
     parser.add_argument('--output_cepo', type=str, required=True,
                         help='Path for the output CEPO gene coordinate file (with header)')
     parser.add_argument('--output_cellect', type=str, default=None,

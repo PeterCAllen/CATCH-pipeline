@@ -24,7 +24,11 @@ for (i in seq_along(args)) {
   if (args[i] == "--output_stats")    output_stats    <- args[i + 1]
   if (args[i] == "--output_pvalues")  output_pvalues  <- args[i + 1]
   if (args[i] == "--compute_pvalue")  compute_pvalue  <- as.integer(args[i + 1])
-  if (args[i] == "--prefilter_pzero") prefilter_pzero <- as.numeric(args[i + 1])
+  if (args[i] == "--prefilter_pzero") {
+    # "none" matches Cepo()'s own package default (prefilter_pzero = NULL, prefiltering
+    # skipped entirely) -- used when the input expression matrix is already QC'd upstream.
+    prefilter_pzero <- if (args[i + 1] == "none") NULL else as.numeric(args[i + 1])
+  }
 }
 
 cat("Input h5ad      :", input_h5ad, "\n")

@@ -1,0 +1,54 @@
+*******************************************************************
+* Genome-wide Complex Trait Analysis (GCTA)
+* version v1.95.0 Linux
+* Built at Jul 21 2025 17:30:18, by GCC 8.4
+* (C) 2010-present, Yang Lab, Westlake University
+* Please report bugs to Jian Yang <jian.yang@westlake.edu.cn>
+*******************************************************************
+Analysis started at 21:35:38 GMT on Sun Dec 21 2025.
+Hostname: compa012
+
+Accepted options:
+--bfile /well/visscher-wray/shared/tmp_Ang/Benchmark_data/g1000_eur_bfile/g1000_eur
+--mBAT-combo /well/visscher-wray/shared/tmp_Ang/Benchmark_gwas/cojo_format/T2D_06.imputed.ma
+--mBAT-gene-list /well/visscher-wray/shared/tmp_Ang/gene_coordinate/geneMatrix.hg19.loc.mBATversion.txt
+--diff-freq 0.2
+--mBAT-wind 10
+--mBAT-svd-gamma 0.9
+--mBAT-write-snpset
+--mBAT-print-all-p
+--out /well/visscher-wray/shared/for_Ang_sq/mbat_result//T2D_06.imputed.ma
+--thread-num 15
+
+
+Reading PLINK FAM file from [/well/visscher-wray/shared/tmp_Ang/Benchmark_data/g1000_eur_bfile/g1000_eur.fam].
+503 individuals to be included from [/well/visscher-wray/shared/tmp_Ang/Benchmark_data/g1000_eur_bfile/g1000_eur.fam].
+Reading PLINK BIM file from [/well/visscher-wray/shared/tmp_Ang/Benchmark_data/g1000_eur_bfile/g1000_eur.bim].
+22665064 SNPs to be included from [/well/visscher-wray/shared/tmp_Ang/Benchmark_data/g1000_eur_bfile/g1000_eur.bim].
+Reading PLINK BED file from [/well/visscher-wray/shared/tmp_Ang/Benchmark_data/g1000_eur_bfile/g1000_eur.bed] in SNP-major format ...
+Genotype data for 503 individuals and 22665064 SNPs to be included from [/well/visscher-wray/shared/tmp_Ang/Benchmark_data/g1000_eur_bfile/g1000_eur.bed].
+
+Reading GWAS summary-level statistics from [/well/visscher-wray/shared/tmp_Ang/Benchmark_gwas/cojo_format/T2D_06.imputed.ma] ...
+GWAS summary statistics of 7124899 SNPs read from [/well/visscher-wray/shared/tmp_Ang/Benchmark_gwas/cojo_format/T2D_06.imputed.ma].
+Phenotypic variance estimated from summary statistics of all 7124899 SNPs: 12.5955 (variance of logit for case-control studies).
+Matching the GWAS meta-analysis results to the genotype data ...
+Calculating allele frequencies ...
+99 SNP(s) have large difference of allele frequency between the GWAS summary data and the reference sample. These SNPs have been saved in [/well/visscher-wray/shared/for_Ang_sq/mbat_result//T2D_06.imputed.ma.freq.badsnps].
+7124794 SNPs are matched to the genotype data.
+Calculating the variance of SNP genotypes ...
+Reading physical positions of the genes from [/well/visscher-wray/shared/tmp_Ang/gene_coordinate/geneMatrix.hg19.loc.mBATversion.txt].
+Physical positions of 58291 genes have been include.
+Mapping the physical positions of genes to SNP data (gene boundaries: 10Kb away from UTRs) ...
+58074 genes have been mapped to SNP data.
+
+Running mBAT-combo analysis for 58074 gene(s) ...
+For computing fastBAT test statistics, SNPs are pruned with LD rsq cutoff of = 0.9 (set by --fastBAT-ld-cutoff 0.9 as default).
+For computing mBAT test statistics, top principal components are selected to explain at least 90% of variance in LD (set by --mBAT-svd-gamma 0.9 as default).
+Saving the results of the mBAT analysis to [/well/visscher-wray/shared/for_Ang_sq/mbat_result//T2D_06.imputed.ma.gene.assoc.mbat] ...
+The following genes have > 10000 SNPs which may take at least a few minutes for each test. You may consider removing these genes from the input list if it takes too much time.
+ENSG00000183117
+The following genes have > 10000 SNPs which may take at least a few minutes for each test. You may consider removing these genes from the input list if it takes too much time.
+ENSG00000078328
+
+Analysis finished at 22:25:07 GMT on Sun Dec 21 2025
+Overall computational time: 49 minutes 29 sec.

@@ -15,7 +15,7 @@ workflow SCDRS {
         cov_file        // covariate file, or NO_FILE
 
     main:
-        MBAT_TO_TSV(mbat_combined)
+        MBAT_TO_TSV(mbat_combined, h5ad)
         MUNGE_SCDRS_GENESET(MBAT_TO_TSV.out.tsv_file)
 
         ch_score_input = h5ad

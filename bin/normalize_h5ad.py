@@ -137,27 +137,36 @@ def main(args):
     else:
         log_message(f"Input scale (declared): {scale}")
 
-    if scale == 'lognorm':
-        if args.log_base == '2':
-            log_message("Reversing prior log2(x+1) normalization")
-            adata.X = apply_elementwise(adata.X, lambda d: np.exp2(d) - 1.0)
-        else:
-            log_message("Reversing prior log1p (natural) normalization")
-            adata.X = apply_elementwise(adata.X, np.expm1)
+    if scale == 'asis':
+        log_message("Input scale is 'asis' -- using X unchanged, no renormalization")
+        adata.uns['catch_normalization'] = {
+            'scheme': 'asis',
+            'input_scale': scale,
+            'min_cells': args.min_cells,
+            'cell_type_col': args.cell_type_col,
+        }
+    else:
+        if scale == 'lognorm':
+            if args.log_base == '2':
+                log_message("Reversing prior log2(x+1) normalization")
+                adata.X = apply_elementwise(adata.X, lambda d: np.exp2(d) - 1.0)
+            else:
+                log_message("Reversing prior log1p (natural) normalization")
+                adata.X = apply_elementwise(adata.X, np.expm1)
 
-    log_message(f"Normalizing each cell to {TARGET_SUM:.0e} total counts")
-    sc.pp.normalize_total(adata, target_sum=TARGET_SUM)
+        log_message(f"Normalizing each cell to {TARGET_SUM:.0e} total counts")
+        sc.pp.normalize_total(adata, target_sum=TARGET_SUM)
 
-    log_message("Applying log2(TPM + 1)")
-    adata.X = apply_elementwise(adata.X, lambda d: np.log2(d + 1.0))
+        log_message("Applying log2(TPM + 1)")
+        adata.X = apply_elementwise(adata.X, lambda d: np.log2(d + 1.0))
 
-    adata.uns['catch_normalization'] = {
-        'scheme': 'log2(TPM+1)',
-        'target_sum': TARGET_SUM,
-        'input_scale': scale,
-        'min_cells': args.min_cells,
-        'cell_type_col': args.cell_type_col,
-    }
+        adata.uns['catch_normalization'] = {
+            'scheme': 'log2(TPM+1)',
+            'target_sum': TARGET_SUM,
+            'input_scale': scale,
+            'min_cells': args.min_cells,
+            'cell_type_col': args.cell_type_col,
+        }
 
     log_message(f"Writing {args.output_h5ad}")
     adata.write_h5ad(args.output_h5ad, compression='gzip')
@@ -180,7 +189,7 @@ if __name__ == '__main__':
     parser.add_argument('--cell_type_col', required=True)
     parser.add_argument('--gene_coords', default=None)
     parser.add_argument('--min_cells', type=int, default=20)
-    parser.add_argument('--input_scale', choices=['auto', 'raw_counts', 'lognorm'], default='auto')
+    parser.add_argument('--input_scale', choices=['auto', 'raw_counts', 'lognorm', 'asis'], default='auto')
     parser.add_argument('--log_base', choices=['e', '2'], default='e')
     parser.add_argument('--use_raw', action='store_true')
     main(parser.parse_args())

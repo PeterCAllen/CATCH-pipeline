@@ -6,7 +6,7 @@ process RUN_SCDRS_DOWNSTREAM {
     label 'high_mem'
     publishDir "${params.outdir}/scdrs/results", mode: 'copy'
 
-    container "${projectDir}/environments/scdrs_v1.0.2.sif"
+    container "${projectDir}/environments/scdrs-downstream.sif"
 
     input:
     tuple path(h5ad), path(score_file), path(cov_file)
@@ -34,6 +34,7 @@ process RUN_SCDRS_DOWNSTREAM {
         --score-file ./"${score_file}" \\
         --out-folder . \\
         --group-analysis "${params.cell_type_col}" \\
+        --gene-analysis \\
         --flag-filter-data ${params.scdrs_filter_data} \\
         --flag-raw-count ${params.scdrs_raw_count} \\
         ${cov_opt} \\

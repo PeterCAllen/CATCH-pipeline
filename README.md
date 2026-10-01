@@ -28,6 +28,12 @@ MAGMA-GSEA and binary LDSC are in `modules/legacy/` and are off by default.
   [perslab/CELLECT](https://github.com/perslab/CELLECT) (`data/ldsc/{print_snps.txt,GRCh37-chr-sizes.txt,w_hm3.snplist}`,
   served via Git LFS at `media.githubusercontent.com`). `data/` is gitignored -- keep a
   copy on non-purged storage (e.g. `/g/data` on NCI systems), not `/scratch`.
+- MAGMA's `g1000_eur` reference (503 EUR samples, ~22.6M SNPs) for the mBAT-combo
+  branch -- deliberately a *different*, denser panel than the LDSC one above, since
+  mBAT-combo's test statistic depends on local LD structure within each gene window.
+  Fetch it with `bin/download_g1000_eur.sh` from a node with internet access (PBS
+  compute nodes typically don't have one); lands at
+  `data/reference/g1000_eur_magma/g1000_eur.{bed,bim,fam}` by default.
 
 Build the containers first (requires root or `--fakeroot`/subuid access -- on clusters
 without that, build on your own machine with Docker/root and copy the resulting `.sif`
@@ -35,17 +41,20 @@ files onto a non-purged path such as `/g/data`, not `/scratch`):
 
 ```bash
 cd environments
-for d in ldsc-py3 cellect-py3 cellex seismic py-r-cepo-scdrs gcta_v1.94.1 scdrs_v1.0.2; do
+for d in ldsc-py3 cellect-py3 cellex seismic py-r-cepo-scdrs gcta_v1.94.1 scdrs-downstream; do
     singularity build --fakeroot $d.sif $d.def
 done
 ```
 
-`py-r-cepo-scdrs.def`, `gcta_v1.94.1.def`, and `scdrs_v1.0.2.def` were authored by
+`py-r-cepo-scdrs.def`, `gcta_v1.94.1.def`, and `scdrs-downstream.def` were authored by
 inspecting how the pipeline calls into each image (see the `%labels` in each file);
-`gcta_v1.94.1.def` and `scdrs_v1.0.2.def` pin exact upstream versions, but
-`py-r-cepo-scdrs.def`'s R/Python package versions are best-effort and were not
-verified against a prior working image -- check results against any known-good
-reference before trusting them for publication numbers.
+`gcta_v1.94.1.def` pins an exact upstream version, and both `scdrs-downstream.def`
+and the Python side of `py-r-cepo-scdrs.def` pin exact versions matching Ang Li's
+environment (Scanpy 1.9.3, AnnData 0.8.0, NumPy 1.26.4, pandas 2.3.3, SciPy 1.14.1,
+h5py 3.15.1, scDRS 1.0.4) for the Ang-vs-Peter CATCH benchmark -- see each file's
+`%labels` for the source. `py-r-cepo-scdrs.def`'s R package versions are still
+best-effort and were not verified against a prior working image -- check results
+against any known-good reference before trusting them for publication numbers.
 
 ## Usage
 

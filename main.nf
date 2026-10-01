@@ -262,11 +262,21 @@ workflow {
             ch_gwas_munged = MUNGE_SUMSTATS.out.gwas_munged
         }
 
+        // CELLECT's own canonical gene coordinate reference (Ensembl v91, GRCh37) --
+        // used in place of our geneMatrix-derived cellect_loc for hg19 runs, since the
+        // two differ substantially (nearly 2,000 genes' worth of set difference, and
+        // >100kb coordinate differences for ~150 shared genes) and CELLECT's own file
+        // is what any standard CELLECT-LDSC run -- including the one this pipeline is
+        // being validated against -- actually uses as GENE_COORD_FILE.
+        ch_cellect_coords = genome_build == 'hg19'
+            ? Channel.value(file(params.ref_hg19_gene_coords, checkIfExists: true))
+            : PREPARE_GENE_COORDS.out.cellect_loc
+
         CONLDSC(
             ch_specificity,
             METRICS.out.annotations,
             ch_gwas_munged,
-            PREPARE_GENE_COORDS.out.cellect_loc
+            ch_cellect_coords
         )
 
         ch_prioritization = CONLDSC.out.prioritization
@@ -274,7 +284,7 @@ workflow {
 
     // --- 4. mBAT-combo, shared by seismic and scDRS ---
     if (flags.seismic || flags.scdrs) {
-        MBAT(ch_gwas, PREPARE_GENE_COORDS.out.cepo_coords, ch_genome_build)
+        MBAT(ch_gwas, PREPARE_GENE_COORDS.out.mbat_loc, ch_genome_build)
 
         if (flags.seismic) {
             SEISMIC(

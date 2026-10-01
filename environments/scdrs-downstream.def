@@ -1,0 +1,35 @@
+Bootstrap: docker
+From: condaforge/mambaforge:23.3.1-1
+
+%labels
+    Description scdrs (perform-downstream group analysis). File/container name says v1.0.2
+                for historical reasons -- actually pinned to 1.0.4 (see %post) to match Ang
+                Li's environment for the Ang-vs-Peter CATCH benchmark.
+
+%post
+    set -eu
+
+    # Exact pins to match Ang's environment (Python 3.11.14, NumPy 1.26.4, pandas 2.3.3,
+    # SciPy 1.14.1, AnnData 0.8.0, scDRS 1.0.4). numpy<2 is also required independent of
+    # that match: scdrs's scikit-misc dependency ships wheels built against the numpy 1.x
+    # C-ABI; numpy>=2 breaks it at import time (ValueError: numpy.dtype size changed) --
+    # 1.26.4 satisfies both constraints. statsmodels has no confirmed version from Ang, left
+    # unpinned.
+    mamba create -y -n scdrs -c conda-forge \
+        python=3.11 numpy=1.26.4 pandas=2.3.3 scipy=1.14.1 anndata=0.8.0 statsmodels git pip
+
+    /opt/conda/envs/scdrs/bin/pip install --no-cache-dir \
+        "scdrs @ git+https://github.com/martinjzhang/scDRS.git@644a5c7900d3c8d84c068725b47dd81e0db22ffb"
+
+    mamba clean -afy
+
+    /opt/conda/envs/scdrs/bin/python -c "import scdrs; assert scdrs.__version__ == '1.0.4', scdrs.__version__"
+    /opt/conda/envs/scdrs/bin/scdrs --help > /dev/null
+
+%environment
+    export PATH=/opt/conda/envs/scdrs/bin:$PATH
+    export LC_ALL=C.UTF-8
+    export OMP_NUM_THREADS=1
+
+%runscript
+    exec "$@"

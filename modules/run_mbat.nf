@@ -30,9 +30,11 @@ process RUN_MBAT {
     
     gcta64 \\
         --mBAT-combo "${formatted_gwas}" \\
-        --bfile "${plink_prefix}.${chr}" \\
+        --bfile "${plink_prefix}" \\
         --mBAT-gene-list "${mbat_genes}" \\
         --mBAT-wind ${params.mbat_window_kb} \\
+        --diff-freq ${params.mbat_diff_freq} \\
+        --mBAT-svd-gamma ${params.mbat_svd_gamma} \\
         --chr ${chr} \\
         --out "${gwas_prefix}_chr${chr}" \\
         2>&1 | tee -a mbat_chr${chr}.log

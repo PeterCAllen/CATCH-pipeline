@@ -2,45 +2,51 @@
 //
 // GCTA mBAT-combo gene-based association test (Li et al. Methods: TSS/TES +/- 10 kb,
 // 1000G Phase 3 EUR). Run once and shared by the seismic and scDRS branches.
+//
+// LD reference is MAGMA's g1000_eur (503 EUR, ~22.6M SNPs, one combined whole-genome
+// PLINK set, not the HapMap3-intersected panel conLDSC/LDSC uses) -- mBAT-combo's test
+// statistic depends on SVD of the local LD matrix within each gene window, so a denser,
+// purpose-built reference matters here in a way it doesn't for genome-wide LDSC.
 
 include { FORMAT_GWAS_FOR_MBAT } from '../modules/format_gwas_for_mbat'
-include { PREPARE_MBAT_GENES   } from '../modules/prepare_mbat_genes'
 include { RUN_MBAT             } from '../modules/run_mbat'
 include { COMBINE_MBAT         } from '../modules/combine_mbat'
 
 workflow MBAT {
     take:
         gwas_sumstats   // raw GWAS summary statistics
-        gene_coords     // CEPO/scDRS gene coordinates (with header)
+        mbat_gene_coords // mBAT gene list from PREPARE_GENE_COORDS.out.mbat_loc: chr, start, end,
+                         // Gene -- no header, unfiltered, already sorted by chr/start/end
         genome_build    // hg19 or hg38
 
     main:
-        def plink_dir    = params.ref_hg19_plink_dir
-        def plink_prefix = new File(params.ref_hg19_plink_prefix).name
+        def plink_prefix = new File(params.ref_hg19_mbat_plink_prefix).name
 
         if (params.gwas_cojo) {
             // Pre-formatted GCTA-COJO .ma supplied directly; skip FORMAT_GWAS_FOR_MBAT.
             ch_formatted_gwas = Channel.fromPath(params.gwas_cojo, checkIfExists: true)
         } else {
-            ch_ref_bim = Channel.value(file(params.ref_hg19_bim_file, checkIfExists: true))
+            // rsID lookup must use the same panel mBAT-combo will run against below --
+            // otherwise SNPs outside the HapMap3-intersected panel never get an rsID and
+            // are dropped before GCTA ever sees them, capping mBAT's SNP set to the
+            // sparser panel regardless of which --bfile it's pointed at.
+            ch_ref_bim = Channel.value(file("${params.ref_hg19_mbat_plink_prefix}.bim", checkIfExists: true))
             FORMAT_GWAS_FOR_MBAT(gwas_sumstats, genome_build, ch_ref_bim)
             ch_formatted_gwas = FORMAT_GWAS_FOR_MBAT.out.formatted_gwas
         }
 
-        PREPARE_MBAT_GENES(gene_coords)
-
-        ch_chr_plink = Channel.of(1..22).map { chr ->
-            tuple(chr, plink_prefix, [
-                file("${plink_dir}/${plink_prefix}.${chr}.bed", checkIfExists: true),
-                file("${plink_dir}/${plink_prefix}.${chr}.bim", checkIfExists: true),
-                file("${plink_dir}/${plink_prefix}.${chr}.fam", checkIfExists: true)
-            ])
-        }
+        // One combined whole-genome bfile, broadcast to all 22 --chr-restricted tasks
+        // (g1000_eur ships as a single bed/bim/fam set, not split per chromosome).
+        ch_mbat_plink = Channel.value(tuple(plink_prefix, [
+            file("${params.ref_hg19_mbat_plink_prefix}.bed", checkIfExists: true),
+            file("${params.ref_hg19_mbat_plink_prefix}.bim", checkIfExists: true),
+            file("${params.ref_hg19_mbat_plink_prefix}.fam", checkIfExists: true)
+        ]))
 
         ch_mbat_input = Channel.of(1..22)
             .combine(ch_formatted_gwas)
-            .combine(PREPARE_MBAT_GENES.out.mbat_genes)
-            .combine(ch_chr_plink, by: 0)
+            .combine(mbat_gene_coords)
+            .combine(ch_mbat_plink)
             .map { chr, gwas, genes, prefix, plink_files ->
                 tuple(chr, gwas, genes, prefix, plink_files)
             }
@@ -62,6 +68,6 @@ workflow MBAT {
 
     emit:
         formatted_gwas = ch_formatted_gwas
-        mbat_genes     = PREPARE_MBAT_GENES.out.mbat_genes
+        mbat_genes     = mbat_gene_coords
         mbat_combined  = COMBINE_MBAT.out.mbat_combined
 }
