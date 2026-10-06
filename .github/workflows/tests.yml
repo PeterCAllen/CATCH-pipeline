@@ -1,0 +1,20 @@
+# NOTE: this only exercises the pure-Python CELLECT port scripts (tests/test_cellect_ports.py).
+# It does not run the Nextflow pipeline itself, which needs Singularity containers and
+# multi-GB reference data not available in a standard GitHub Actions runner.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  cellect-ports:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pandas
+      - run: python tests/test_cellect_ports.py

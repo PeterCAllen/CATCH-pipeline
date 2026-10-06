@@ -1,0 +1,52 @@
+Bootstrap: docker
+From: bioconductor/bioconductor_docker:RELEASE_3_18
+
+%labels
+    Description R + Python glue container for Cepo, GWAS/mBAT formatting, Cauchy combination, and scDRS munge-gs/compute-score.
+    Note Python package versions below are pinned to exactly match Ang Li's environment
+         (Scanpy 1.9.3, AnnData 0.8.0, NumPy 1.26.4, pandas 2.3.3, SciPy 1.14.1, h5py 3.15.1,
+         scDRS 1.0.4 @ commit 644a5c7900d3c8d84c068725b47dd81e0db22ffb -- not on PyPI, which
+         still serves 1.0.2) for the Ang-vs-Peter CATCH benchmark. R package versions are
+         still best-effort as of authoring this file -- see git history for the prior note.
+
+%post
+    set -eu
+
+    # NOTE: every Rscript -e below is kept on ONE physical line, no backslash
+    # continuation. Singularity's def-file parser scans raw lines for section
+    # headers anywhere in the file, so a wrapped line whose first token happens
+    # to be an R infix operator like `%in%` gets misread as an invalid section.
+
+    # --- R packages (Bioconductor base image ships R + BiocManager already) ---
+    Rscript -e 'options(repos = c(CRAN = "https://packagemanager.posit.co/cran/2024-06-03")); BiocManager::install(c("Cepo", "zellkonverter", "SingleCellExperiment", "SummarizedExperiment"), update = FALSE, ask = FALSE); install.packages(c("data.table", "tidyverse", "ggplot2"))'
+
+    # --- Python 3 + scanpy/anndata + scdrs CLI ---
+    apt-get update && apt-get install -y --no-install-recommends python3-pip python3-venv git && \
+        rm -rf /var/lib/apt/lists/*
+
+    # Exact pins to match Ang's environment (see %labels). numpy<2 is also required
+    # independent of that match: scdrs's scikit-misc dependency ships wheels built
+    # against the numpy 1.x C-ABI; numpy>=2 breaks it at import time (ValueError:
+    # numpy.dtype size changed) -- 1.26.4 satisfies both constraints.
+    python3 -m pip install --no-cache-dir \
+        numpy==1.26.4 pandas==2.3.3 scipy==1.14.1 h5py==3.15.1 anndata==0.8.0 scanpy==1.9.3 \
+        "scdrs @ git+https://github.com/martinjzhang/scDRS.git@644a5c7900d3c8d84c068725b47dd81e0db22ffb"
+
+    # Smoke test
+    Rscript -e 'library(Cepo); library(zellkonverter); library(SingleCellExperiment); library(data.table); library(tidyverse)'
+    python3 -c "import scanpy, anndata, pandas, numpy, scipy, h5py, scdrs; assert scdrs.__version__ == '1.0.4', scdrs.__version__"
+    scdrs --help > /dev/null
+
+%environment
+    export LC_ALL=C.UTF-8
+    export OMP_NUM_THREADS=1
+    # Nextflow's PBS+singularity task wrapper runs with `singularity exec --no-home`
+    # and a stripped host environment, so $HOME never resolves to a real, existing
+    # directory on the compute node. zellkonverter::readH5AD() uses basilisk, which
+    # needs ~/.cache/R/basilisk to exist -- set HOME to something that always exists
+    # inside the container itself (baked in here since host-side env exports don't
+    # survive the --no-home + `env -` stripping).
+    export HOME=/tmp
+
+%runscript
+    exec "$@"

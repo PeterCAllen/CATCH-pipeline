@@ -1,0 +1,53 @@
+Bootstrap: docker
+From: condaforge/mambaforge:23.3.1-1
+
+%files
+    ldsc-h2cts-tryexcept.patch /opt/ldsc-h2cts-tryexcept.patch
+    ldsc-py3-bitarray-decode.patch /opt/ldsc-py3-bitarray-decode.patch
+
+%labels
+    Description CBIIT/ldsc (ldsc39 branch, py3.9+, actively maintained fork of bulik/ldsc) with the per-cell-type try/except error handling for --h2-cts (ldsc-h2cts-tryexcept.patch) and a bitarray.decode() py3 porting fix for --l2 (ldsc-py3-bitarray-decode.patch) re-applied on top
+
+%post
+    set -eu
+
+    apt-get update && apt-get install -y --no-install-recommends git && \
+        rm -rf /var/lib/apt/lists/*
+
+    mamba create -y -n ldsc -c conda-forge -c bioconda \
+        python=3.9 \
+        bitarray \
+        numpy \
+        pandas \
+        scipy \
+        pybedtools
+
+    mamba clean -afy
+
+    git clone https://github.com/CBIIT/ldsc.git /opt/ldsc
+    cd /opt/ldsc
+    git checkout 6c673952cee74bd5c57aef1555a03b1c015399a0
+
+    git apply /opt/ldsc-h2cts-tryexcept.patch
+    grep -q 'CTS ERROR' ldscore/sumstats.py
+
+    # CBIIT/ldsc's py3 port of ldscore.py passes bitarray's decode() (a lazy
+    # iterator in the installed bitarray version) straight to np.array(),
+    # which numpy can't consume -- "TypeError: float() argument must be a
+    # string or a number, not 'bitarray.decodeiterator'" during --l2.
+    git apply /opt/ldsc-py3-bitarray-decode.patch
+    grep -q 'list(slice.decode' ldscore/ldscore.py
+
+    chmod +x /opt/ldsc/ldsc.py /opt/ldsc/munge_sumstats.py
+
+    /opt/conda/envs/ldsc/bin/python /opt/ldsc/ldsc.py --help > /dev/null
+    /opt/conda/envs/ldsc/bin/python /opt/ldsc/munge_sumstats.py --help > /dev/null
+    /opt/conda/envs/ldsc/bin/python -m py_compile /opt/ldsc/ldscore/ldscore.py /opt/ldsc/ldscore/sumstats.py
+
+%environment
+    export PATH=/opt/conda/envs/ldsc/bin:/opt/ldsc:$PATH
+    export LC_ALL=C.UTF-8
+    export OMP_NUM_THREADS=1
+
+%runscript
+    exec "$@"

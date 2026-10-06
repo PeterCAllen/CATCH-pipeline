@@ -1,0 +1,15 @@
+work/
+results/
+.nextflow/
+.nextflow.log*
+__pycache__/
+*.pyc
+environments/*.sif
+data/
+paper.md
+pipeline_update.md
+
+# Ad-hoc run logs/scratch from manual testing -- use -with-report/-with-trace
+# (already enabled by default, see nextflow.config) instead of redirecting to these.
+nextflow_run_*.log
+pybedtools_tmp/

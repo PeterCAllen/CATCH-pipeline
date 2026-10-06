@@ -1,0 +1,35 @@
+Bootstrap: docker
+From: condaforge/mambaforge:23.3.1-1
+
+%labels
+    Description CELLEX expression specificity metrics (provides the GES matrix for conLDSC-GES)
+
+%post
+    set -eu
+
+    # numpy pinned <1.24: cellex==1.2.2's own source (cellex/preprocessing/anova.py)
+    # calls the deprecated `np.float` alias, removed in numpy 1.24.
+    mamba install -y -c conda-forge -c bioconda \
+        python=3.9 \
+        "numpy<1.24" \
+        pandas \
+        scipy \
+        h5py \
+        anndata \
+        scanpy
+
+    pip install --no-cache-dir cellex==1.2.2
+
+    mamba clean -afy
+
+    # cellex has no __version__ attribute; just confirm it imports.
+    python -c "import cellex, scanpy; print('cellex OK'); print('scanpy', scanpy.__version__)"
+
+%environment
+    export LC_ALL=C.UTF-8
+    export OMP_NUM_THREADS=1
+    export OPENBLAS_NUM_THREADS=1
+    export NUMBA_CACHE_DIR=/tmp
+
+%runscript
+    exec "$@"
