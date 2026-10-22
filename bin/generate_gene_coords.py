@@ -5,6 +5,7 @@ Based on manual analysis scripts: 0-Gene_coordinate_ready-hg19.py and 0-Gene_coo
 """
 import pandas as pd
 import argparse
+import shutil
 import time
 
 EXPECTED_PC_GENES = 19430
@@ -14,6 +15,39 @@ def log_message(message):
     """Prints a formatted log message with a timestamp."""
     timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
     print(f"--- {timestamp} --- {message}", flush=True)
+
+def protein_coding_mask(df):
+    """Boolean mask of rows whose gene_type is protein_coding (case/dash-insensitive)."""
+    if 'gene_type' not in df.columns:
+        raise ValueError(
+            "Protein-coding filter requested but the gene matrix has no 'gene_type' column. "
+            f"Available columns: {sorted(df.columns)}"
+        )
+    gene_type_norm = df['gene_type'].astype(str).str.strip().str.lower().str.replace('-', '_', regex=False)
+    return gene_type_norm == 'protein_coding'
+
+
+def write_cellect_ref(cellect_ref, output, gene_matrix=None):
+    """Pass the CELLECT gene coordinate reference through; if gene_matrix is given, keep only
+    genes whose Ensembl ID is protein-coding in it."""
+    if gene_matrix is None:
+        shutil.copyfile(cellect_ref, output)
+        log_message(f"CELLECT reference gene coordinates copied unchanged (all genes) to {output}")
+        return
+
+    ref = pd.read_csv(cellect_ref, sep=r'\s+', header=None, dtype=str)
+    if ref.shape[1] != 6:
+        raise ValueError(f"{cellect_ref}: expected 6 columns (GENE CHR START END STRAND GENE_NAME), got {ref.shape[1]}")
+    in_pc = ref[0].isin(gene_matrix.loc[protein_coding_mask(gene_matrix), 'ensgid'])
+    n_unmatched = (~ref[0].isin(gene_matrix['ensgid'])).sum()
+    ref[in_pc].to_csv(output, sep='\t', index=False, header=False)
+    log_message(
+        f"CELLECT reference gene coordinates restricted to protein_coding: kept {in_pc.sum()}/{len(ref)} "
+        f"(dropped {len(ref) - in_pc.sum() - n_unmatched} non-protein-coding, {n_unmatched} absent "
+        f"from the gene matrix). Biotypes come from the gene matrix annotation, not the reference's own."
+    )
+    log_message(f"CELLECT reference gene coordinate file saved to {output}")
+
 
 def main(args):
     """
@@ -59,6 +93,10 @@ def main(args):
     # Remove rows with NaN in hg19 coordinates
     gene_coordinates.dropna(subset=[coord_start_col, coord_end_col], inplace=True)
     log_message(f"After removing NaN coordinates: {gene_coordinates.shape}")
+
+    if args.cellect_ref:
+        write_cellect_ref(args.cellect_ref, args.output_cellect_ref,
+                          gene_coordinates if args.coords_protein_coding else None)
     
     # Prepare gene coordinates (always hg19 for all analyses)
     df_coords = gene_coordinates.copy()
@@ -76,22 +114,20 @@ def main(args):
 
     # mBAT-combo is a pure GWAS/LD-based gene test with no expression-quantification
     # rationale for excluding non-coding loci (unlike Cepo/scDRS, where protein-coding
-    # restriction is about scRNA-seq measurement reliability). Always give mBAT the
-    # full gene set, independent of --protein_coding/--no_protein_coding below.
+    # restriction is about scRNA-seq measurement reliability). By default give mBAT the
+    # full gene set, independent of --protein_coding/--no_protein_coding below;
+    # --coords_protein_coding restricts it to protein-coding genes to save compute
+    # (downstream scDRS/seismic only ever use genes present in the PC-filtered h5ad).
     df_mbat = df_coords.copy()
+    if args.coords_protein_coding:
+        df_mbat = df_mbat[protein_coding_mask(df_mbat)]
+        log_message(f"mBAT gene coordinates (protein_coding only, --coords_protein_coding): {df_mbat.shape}")
+    else:
+        log_message(f"mBAT gene coordinates (unfiltered, all gene types): {df_mbat.shape}")
     df_mbat.sort_values(by=['chr', 'start', 'end'], inplace=True)
-    log_message(f"mBAT gene coordinates (unfiltered, all gene types): {df_mbat.shape}")
 
     if args.protein_coding:
-        if 'gene_type' not in df_coords.columns:
-            raise ValueError(
-                "--protein_coding requested but the gene matrix has no 'gene_type' column. "
-                f"Available columns: {sorted(df_coords.columns)}"
-            )
-        gene_type_norm = (
-            df_coords['gene_type'].astype(str).str.strip().str.lower().str.replace('-', '_', regex=False)
-        )
-        df_coords = df_coords[gene_type_norm == 'protein_coding']
+        df_coords = df_coords[protein_coding_mask(df_coords)]
         log_message(f"After restricting to protein_coding: {df_coords.shape}")
 
         n_genes = len(df_coords)
@@ -114,8 +150,8 @@ def main(args):
     df_ldsc_out.to_csv(args.output_ldsc, sep='\t', index=False, header=False)
     log_message(f"LDSC gene coordinate file saved to {args.output_ldsc} ({len(df_ldsc_out)} genes, hg19 coordinates)")
 
-    # === Output mBAT: always the full (unfiltered) gene set (chr, start, end, Gene) - NO HEADER ===
-    log_message("Creating mBAT gene coordinate file (hg19, unfiltered)...")
+    # === Output mBAT: all genes unless --coords_protein_coding (chr, start, end, Gene) - NO HEADER ===
+    log_message("Creating mBAT gene coordinate file (hg19)...")
     df_mbat_out = df_mbat[['chr', 'start', 'end', 'Gene']].copy()
     df_mbat_out.to_csv(args.output_mbat, sep='\t', index=False, header=False)
     log_message(f"mBAT gene coordinate file saved to {args.output_mbat} ({len(df_mbat_out)} genes, hg19 coordinates)")
@@ -130,6 +166,8 @@ def main(args):
     if args.output_cellect:
         log_message("Creating CELLECT gene coordinate file (hg19)...")
         df_cellect_out = df_coords[['Gene', 'chr', 'start', 'end', coord_strand_col, 'gene_name']].copy()
+        if args.coords_protein_coding and not args.protein_coding:
+            df_cellect_out = df_cellect_out[protein_coding_mask(df_coords)]
         df_cellect_out.to_csv(args.output_cellect, sep='\t', index=False, header=False)
         log_message(f"CELLECT gene coordinate file saved to {args.output_cellect} ({len(df_cellect_out)} genes)")
 
@@ -162,7 +200,8 @@ if __name__ == '__main__':
     parser.add_argument('--output_ldsc', type=str, required=True,
                         help='Path for the output LDSC gene location file (no header)')
     parser.add_argument('--output_mbat', type=str, required=True,
-                        help='Path for the output mBAT gene location file (no header, always unfiltered)')
+                        help='Path for the output mBAT gene location file (no header; all genes '
+                             'unless --coords_protein_coding)')
     parser.add_argument('--output_cepo', type=str, required=True,
                         help='Path for the output CEPO gene coordinate file (with header)')
     parser.add_argument('--output_cellect', type=str, default=None,
@@ -170,6 +209,16 @@ if __name__ == '__main__':
     parser.add_argument('--no_protein_coding', dest='protein_coding', action='store_false',
                         help='Disable the protein-coding gene filter')
     parser.set_defaults(protein_coding=True)
+    parser.add_argument('--coords_protein_coding', action='store_true',
+                        help='Restrict the mBAT, CELLECT and --cellect_ref gene coordinate files to '
+                             'protein-coding genes (independent of --no_protein_coding)')
+    parser.add_argument('--cellect_ref', type=str, default=None,
+                        help='CELLECT-format gene coordinate reference (6 cols, no header) to pass '
+                             'through to --output_cellect_ref, PC-filtered if --coords_protein_coding')
+    parser.add_argument('--output_cellect_ref', type=str, default=None,
+                        help='Path for the (optionally PC-filtered) copy of --cellect_ref')
 
     args = parser.parse_args()
+    if bool(args.cellect_ref) != bool(args.output_cellect_ref):
+        parser.error('--cellect_ref and --output_cellect_ref must be given together')
     main(args)

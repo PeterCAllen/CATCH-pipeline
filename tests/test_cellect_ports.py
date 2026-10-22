@@ -188,6 +188,60 @@ def test_sanitize(d):
     check("rejects '__' in annotation names", r.returncode != 0 and "CELLECT-safe" in r.stderr)
 
 
+def test_generate_gene_coords(d):
+    print("\n[generate_gene_coords --coords_protein_coding]")
+    gm = os.path.join(d, "geneMatrix.tsv.gz")
+    pd.DataFrame({
+        "ensgid":    ["ENSG1", "ENSG2", "ENSG3", "ENSG4"],
+        "gene_name": ["PC1", "LNC1", "PC2", "PCX"],
+        "gene_type": ["protein_coding", "lncRNA", "protein_coding", "protein_coding"],
+        "hg19g0":    ["chr1", "chr1", "chr2", "chrX"],
+        "g1":        [1000, 5000, 2000, 3000],
+        "g2":        [2000, 6000, 3000, 4000],
+        "gstr":      ["+", "-", "+", "+"],
+    }).to_csv(gm, sep="\t", index=False, compression="gzip")
+
+    ref = os.path.join(d, "cellect_ref.txt")
+    with open(ref, "w") as fh:
+        fh.write("ENSG1\t1\t1000\t2000\t+\tPC1\n")
+        fh.write("ENSG2\t1\t5000\t6000\t-\tLNC1\n")
+        fh.write("ENSG3\t2\t2000\t3000\t+\tPC2\n")
+        fh.write("ENSG9\t3\t100\t200\t+\tNOTINMATRIX\n")
+
+    def gen(tag, *flags):
+        out = {k: os.path.join(d, f"{k}.{tag}") for k in
+               ["magma", "ldsc", "cepo", "cellect", "mbat", "cellect_ref"]}
+        run("generate_gene_coords.py", "--gene_matrix", gm, "--genome_build", "hg19",
+            "--output_magma", out["magma"], "--output_ldsc", out["ldsc"],
+            "--output_cepo", out["cepo"], "--output_cellect", out["cellect"],
+            "--output_mbat", out["mbat"], "--cellect_ref", ref,
+            "--output_cellect_ref", out["cellect_ref"], *flags)
+        return out
+
+    def genes(path, col):
+        return list(pd.read_csv(path, sep="\t", header=None)[col])
+
+    default = gen("default")
+    check("default: mBAT keeps all autosomal genes",
+          genes(default["mbat"], 3) == ["ENSG1", "ENSG2", "ENSG3"], str(genes(default["mbat"], 3)))
+    with open(ref) as a, open(default["cellect_ref"]) as b:
+        check("default: cellect_ref passed through unchanged", a.read() == b.read())
+
+    pc = gen("pc", "--coords_protein_coding")
+    check("PC: mBAT keeps only protein-coding genes",
+          genes(pc["mbat"], 3) == ["ENSG1", "ENSG3"], str(genes(pc["mbat"], 3)))
+    got_ref = pd.read_csv(pc["cellect_ref"], sep="\t", header=None)
+    check("PC: cellect_ref keeps only PC genes in the matrix",
+          list(got_ref[0]) == ["ENSG1", "ENSG3"], str(list(got_ref[0])))
+    check("PC: cellect_ref stays 6-col headerless", got_ref.shape[1] == 6 and got_ref.iloc[0, 0] == "ENSG1")
+
+    nopc = gen("nopc", "--no_protein_coding", "--coords_protein_coding")
+    check("--no_protein_coding keeps lncRNA in cepo coords",
+          "ENSG2" in list(pd.read_csv(nopc["cepo"], sep="\t")["Gene"]))
+    check("--no_protein_coding --coords_protein_coding: cellect is PC-only",
+          genes(nopc["cellect"], 0) == ["ENSG1", "ENSG3"], str(genes(nopc["cellect"], 0)))
+
+
 with tempfile.TemporaryDirectory() as d:
     test_format_genes(d)
     test_make_all_genes(d)
@@ -195,6 +249,7 @@ with tempfile.TemporaryDirectory() as d:
     test_parse_results(d)
     test_split_ldscores(d)
     test_sanitize(d)
+    test_generate_gene_coords(d)
 
 print()
 if FAILED:

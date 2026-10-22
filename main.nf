@@ -51,6 +51,10 @@ def helpMessage() {
       --gwas_sumstats_munged PATH  Pre-munged LDSC .sumstats.gz; bypasses munging for
                                  the conLDSC branch
       --gene_matrix PATH         Path to geneMatrix.tsv.gz file
+      --gene_coords_protein_coding_only BOOL
+                                 Restrict the mBAT gene list and hg19 conLDSC gene
+                                 coordinate file to protein-coding genes; false = all
+                                 genes [${params.gene_coords_protein_coding_only}]
       --cell_type_col STR        Column in h5ad.obs with cell types [${params.cell_type_col}]
 
     Preprocessing (Li et al.: log2(TPM+1), protein-coding, >=20 cells per cell type):
@@ -201,6 +205,7 @@ workflow {
      genome_build     : ${genome_build}
      gwas_sample_size : ${params.gwas_sample_size}
      cell_type_col    : ${params.cell_type_col}
+     gene_coords      : ${asBool(params.gene_coords_protein_coding_only) ? 'protein-coding only' : 'all genes'} (mBAT, conLDSC)
 
      CATCH Components
      ----------------
@@ -228,7 +233,11 @@ workflow {
     ch_genome_build = Channel.value(genome_build)
 
     // --- 1. Reference gene coordinates ---
-    PREPARE_GENE_COORDS(ch_gene_matrix, ch_genome_build)
+    ch_cellect_ref = (flags.conldsc && genome_build == 'hg19')
+        ? Channel.value(file(params.ref_hg19_gene_coords, checkIfExists: true))
+        : Channel.value(file("NO_FILE"))
+
+    PREPARE_GENE_COORDS(ch_gene_matrix, ch_genome_build, ch_cellect_ref)
 
     // --- 2. Standardize the single-cell reference ---
     NORMALIZE_H5AD(ch_h5ad, PREPARE_GENE_COORDS.out.cepo_coords)
@@ -267,9 +276,10 @@ workflow {
         // two differ substantially (nearly 2,000 genes' worth of set difference, and
         // >100kb coordinate differences for ~150 shared genes) and CELLECT's own file
         // is what any standard CELLECT-LDSC run -- including the one this pipeline is
-        // being validated against -- actually uses as GENE_COORD_FILE.
+        // being validated against -- actually uses as GENE_COORD_FILE. Passed through
+        // PREPARE_GENE_COORDS so --gene_coords_protein_coding_only can restrict it.
         ch_cellect_coords = genome_build == 'hg19'
-            ? Channel.value(file(params.ref_hg19_gene_coords, checkIfExists: true))
+            ? PREPARE_GENE_COORDS.out.cellect_ref_loc
             : PREPARE_GENE_COORDS.out.cellect_loc
 
         CONLDSC(

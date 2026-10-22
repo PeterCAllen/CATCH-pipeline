@@ -16,7 +16,8 @@ workflow MBAT {
     take:
         gwas_sumstats   // raw GWAS summary statistics
         mbat_gene_coords // mBAT gene list from PREPARE_GENE_COORDS.out.mbat_loc: chr, start, end,
-                         // Gene -- no header, unfiltered, already sorted by chr/start/end
+                         // Gene -- no header, already sorted by chr/start/end; all genes, or
+                         // protein-coding only with --gene_coords_protein_coding_only
         genome_build    // hg19 or hg38
 
     main:

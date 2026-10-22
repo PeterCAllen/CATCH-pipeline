@@ -92,6 +92,16 @@ The Cauchy combination (CATCH) runs only when `--run_conldsc --run_cepo --run_sc
 are all enabled; `--run_cellex`/`--run_seismic` are optional validation branches and
 are not required for (or included in) the combination.
 
+By default the mBAT-combo gene list and the hg19 conLDSC gene coordinate file cover all
+genes. `--gene_coords_protein_coding_only true` restricts both to protein-coding genes
+(about a third of the mBAT-combo gene tests). This is separate from
+`--protein_coding_only`, which filters the expression matrix (and, for hg38 runs, the
+conLDSC coordinates as well). scDRS and seismic only use
+genes present in the (protein-coding) h5ad, so their results should not change. conLDSC
+results can shift slightly: CELLECT gives an ES of 0 to coordinate-file genes that are
+absent from the specificity matrix, so dropping non-coding genes changes some
+annotation values.
+
 The paper applies FDR across all cell types *and traits*. One run covers one trait, so
 after running every trait:
 
