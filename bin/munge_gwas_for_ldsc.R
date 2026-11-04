@@ -83,7 +83,11 @@ if (!"Z" %in% names(dt) && !any(c("BETA", "OR") %in% names(dt))) {
   stop("ERROR: no signed effect column (Z, BETA or OR); munge_sumstats.py cannot run.")
 }
 
-keep <- intersect(c("SNP", "A1", "A2", "N", "Z", "BETA", "OR", "SE", "P", "FRQ", "INFO"), names(dt))
+# munge_sumstats.py accepts exactly one signed statistic and errors ("Too many signed
+# sumstat columns") if e.g. Z and BETA are both present, as in Jansen et al. 2019.
+# Prefer Z; otherwise fall back to BETA, then OR.
+signed <- intersect(c("Z", "BETA", "OR"), names(dt))[1]
+keep <- intersect(c("SNP", "A1", "A2", "N", signed, "SE", "P", "FRQ", "INFO"), names(dt))
 out <- dt[, ..keep]
 
 out <- out[!is.na(SNP) & nzchar(SNP) & SNP != "."]

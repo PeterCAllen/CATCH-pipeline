@@ -95,6 +95,22 @@ process FORMAT_GWAS_FOR_MBAT {
     cat(sprintf("  Columns found: %s\\n", paste(colnames(gwas), collapse=", ")))
     cat(sprintf("  Total rows: %d\\n", nrow(gwas)))
     
+    # Map common alternative column names onto N and freq. For N, effective sample size
+    # is preferred over a plain sum (e.g. Jansen et al. 2019 ship both Neff and Nsum, and
+    # derive their BETA/SE from Neff). For freq, only effect-allele (A1) frequencies are
+    # accepted -- a MAF column is not necessarily the frequency of A1.
+    use_alias <- function(gwas, target, aliases) {
+        if (target %in% colnames(gwas)) return(gwas)
+        hit <- intersect(aliases, colnames(gwas))
+        if (length(hit) > 0) {
+            cat(sprintf("  Using column '%s' as %s\\n", hit[1], target))
+            gwas[[target]] <- gwas[[hit[1]]]
+        }
+        gwas
+    }
+    gwas <- use_alias(gwas, "N", c("Neff", "N_eff", "NEFF", "Nsum", "N_total", "NMISS", "OBS_CT"))
+    gwas <- use_alias(gwas, "freq", c("EAF", "eaf", "FRQ", "AF1", "A1FREQ", "Freq1", "FREQ"))
+
     # Check if we have required columns
     required_cols <- c("SNP", "A1", "A2", "N")
     missing_required <- setdiff(required_cols, colnames(gwas))
@@ -154,6 +170,7 @@ process FORMAT_GWAS_FOR_MBAT {
     gwas_formatted <- gwas %>%
       select(SNP, A1, A2, freq, b, se, p = P, N) %>%
       filter(!is.na(SNP), !is.na(N), N > 0) %>%
+      filter(!is.na(freq), !is.na(b), !is.na(se), !is.na(p)) %>%
       filter(grepl("^rs", SNP))
     
     # Check if we have any data left

@@ -10,20 +10,23 @@ From: condaforge/mambaforge:23.3.1-1
     set -eu
 
     # Exact pins to match Ang's environment (Python 3.11.14, NumPy 1.26.4, pandas 2.3.3,
-    # SciPy 1.14.1, AnnData 0.8.0, scDRS 1.0.4). numpy<2 is also required independent of
-    # that match: scdrs's scikit-misc dependency ships wheels built against the numpy 1.x
-    # C-ABI; numpy>=2 breaks it at import time (ValueError: numpy.dtype size changed) --
-    # 1.26.4 satisfies both constraints. statsmodels has no confirmed version from Ang, left
-    # unpinned.
+    # SciPy 1.14.1, AnnData 0.8.0, Scanpy 1.9.3, h5py 3.15.1, scDRS 1.0.4). Scanpy and h5py
+    # must be pinned here: otherwise scdrs's own dependency pulls the latest Scanpy.
+    # numpy<2 is also required independent of that match: scdrs's scikit-misc dependency
+    # ships wheels built against the numpy 1.x C-ABI; numpy>=2 breaks it at import time
+    # (ValueError: numpy.dtype size changed) -- 1.26.4 satisfies both constraints.
+    # matplotlib<3.9: Scanpy 1.9.3 imports matplotlib.cm.get_cmap, removed in 3.9.
+    # statsmodels has no confirmed version from Ang, left unpinned.
     mamba create -y -n scdrs -c conda-forge \
-        python=3.11 numpy=1.26.4 pandas=2.3.3 scipy=1.14.1 anndata=0.8.0 statsmodels git pip
+        python=3.11 numpy=1.26.4 pandas=2.3.3 scipy=1.14.1 anndata=0.8.0 scanpy=1.9.3 \
+        h5py=3.15.1 "matplotlib<3.9" statsmodels git pip
 
     /opt/conda/envs/scdrs/bin/pip install --no-cache-dir \
         "scdrs @ git+https://github.com/martinjzhang/scDRS.git@644a5c7900d3c8d84c068725b47dd81e0db22ffb"
 
     mamba clean -afy
 
-    /opt/conda/envs/scdrs/bin/python -c "import scdrs; assert scdrs.__version__ == '1.0.4', scdrs.__version__"
+    /opt/conda/envs/scdrs/bin/python -c "import scanpy, h5py, scdrs; assert scdrs.__version__ == '1.0.4', scdrs.__version__; assert scanpy.__version__ == '1.9.3', scanpy.__version__; assert h5py.__version__ == '3.15.1', h5py.__version__"
     /opt/conda/envs/scdrs/bin/scdrs --help > /dev/null
 
 %environment

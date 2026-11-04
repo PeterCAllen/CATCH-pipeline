@@ -14,13 +14,19 @@ def main(args):
 
     # Get metadata for sampling without loading the full matrix
     obs_df = adata.obs.copy()
-    
-    # --- Take 10k max for each cell-type ---
+
+    # --- Take at most cells_per_type cells for each cell-type ---
     np.random.seed(602)
 
-    cells_per_type = 10000
+    cells_per_type = args.cells_per_type
     celltype_col = args.cell_type_col
-    donor_col = 'individual'  
+    donor_col = args.donor_col
+
+    if args.cell_types:
+        missing = set(args.cell_types) - set(obs_df[celltype_col].unique())
+        if missing:
+            raise ValueError(f"Cell types not found in '{celltype_col}': {sorted(missing)}")
+        obs_df = obs_df[obs_df[celltype_col].isin(args.cell_types)]
 
     sampled_indices = []
 
@@ -57,8 +63,17 @@ def main(args):
     else:
         ad_sub.layers['counts'] = ad_sub.X.copy()
     
+    # The pipeline matches genes by Ensembl ID, so var_names must be Ensembl IDs.
+    if args.gene_id_col:
+        if args.gene_id_col not in ad_sub.var.columns:
+            raise ValueError(f"'{args.gene_id_col}' not in var. Available: {list(ad_sub.var.columns)}")
+        ad_sub.var['gene_symbol'] = ad_sub.var_names.astype(str)
+        ad_sub.var_names = ad_sub.var[args.gene_id_col].astype(str).values
+        ad_sub.var_names_make_unique()
+        print(f"Set var_names from var['{args.gene_id_col}'] (symbols kept in var['gene_symbol'])")
+
     print(f"Dimensions after filtering: {ad_sub.n_obs} cells x {ad_sub.n_vars} genes")
-    
+
     # --- Save output ---
     print("Saving filtered h5ad file...")
     ad_sub.write(args.output_h5ad)
@@ -70,6 +85,10 @@ if __name__ == '__main__':
     parser.add_argument('--input_h5ad', type=str, required=True, help='Path to the input raw h5ad file.')
     parser.add_argument('--output_h5ad', type=str, required=True, help='Path for the output processed h5ad file.')
     parser.add_argument('--cell_type_col', type=str, required=True, help='Metadata column containing cell type labels.')
-    
+    parser.add_argument('--donor_col', type=str, default='individual', help='Metadata column identifying the donor; cells are sampled evenly across donors.')
+    parser.add_argument('--cells_per_type', type=int, default=10000, help='Maximum number of cells to keep per cell type.')
+    parser.add_argument('--cell_types', type=str, nargs='+', default=None, help='Only keep these cell types (default: all).')
+    parser.add_argument('--gene_id_col', type=str, default=None, help='var column holding Ensembl gene IDs to use as var_names (the pipeline requires Ensembl IDs).')
+
     args = parser.parse_args()
     main(args)

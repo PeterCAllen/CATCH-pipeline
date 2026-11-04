@@ -13,3 +13,6 @@ pipeline_update.md
 # (already enabled by default, see nextflow.config) instead of redirecting to these.
 nextflow_run_*.log
 pybedtools_tmp/
+
+# Local secrets (e.g. ZENODO_API_KEY)
+.env
